@@ -1,0 +1,2 @@
+Reservation ID,Spot ID,Spot Number,Lot ID,Prime Location Name,Address,Pin Code,Vehicle Number,Parking Timestamp (UTC),Leaving Timestamp (UTC),Hourly Price,Parking Cost,Status,Remarks
+1,1,Spot-1,1,Downtown Plaza,"MG Road, Central",560001,KA-05-MJ-9999,2026-10-14 06:57:04,2026-10-14 06:57:04,50.0,50.0,completed,

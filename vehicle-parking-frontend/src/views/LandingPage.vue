@@ -20,6 +20,10 @@
           </div>
         </div>
       </div>
+      <div class="mt-4">
+        <span class="text-muted">Need a user account? </span>
+        <router-link to="/register" class="fw-bold text-success text-decoration-none">Register here</router-link>
+      </div>
     </div>
   </div>
 </template>

@@ -1,0 +1,2 @@
+Reservation ID,Spot ID,Spot Number,Lot ID,Prime Location Name,Address,Pin Code,Vehicle Number,Parking Timestamp (UTC),Leaving Timestamp (UTC),Hourly Price,Parking Cost,Status,Remarks
+1,1,Spot-1,1,Cyber Park Hub,Electronic City Phase 1,560100,KA-01-AB-1234,2026-10-14 07:00:02,2026-10-14 07:00:02,45.0,45.0,completed,Sedan
