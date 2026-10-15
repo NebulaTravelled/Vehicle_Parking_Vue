@@ -6,14 +6,19 @@ db = SQLAlchemy()
 # ==================== MODELS ====================
 
 class User(db.Model):
-    """User model (Superuser Admin & Standard Users)"""
+    """User model (Superuser Admin, Company Operators & Standard Users)"""
     __tablename__ = 'users'
     
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), default='user', nullable=False)  # 'admin' or 'user'
+    role = db.Column(db.String(20), default='user', nullable=False)  # 'admin', 'company', or 'user'
+    name = db.Column(db.String(100), nullable=True)
+    company_name = db.Column(db.String(150), nullable=True)
+    mobile_number = db.Column(db.String(30), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    address = db.Column(db.String(255), nullable=True)
     last_visited_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -28,19 +33,26 @@ class ParkingLot(db.Model):
     """
     Parking lot model
     Physical space containing a collection of 4-wheeler parking spots.
-    Attributes: id, prime_location_name, price, address, pin_code, number_of_spots
+    Attributes: id, prime_location_name, price, address, pin_code, number_of_spots, company_id, grid dimensions
     """
     __tablename__ = 'parking_lots'
     
     id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     prime_location_name = db.Column(db.String(150), nullable=False)
     price = db.Column(db.Float, default=0.0, nullable=False)  # Price per hour
     address = db.Column(db.String(255), nullable=False)
     pin_code = db.Column(db.String(20), nullable=False)
     number_of_spots = db.Column(db.Integer, default=0, nullable=False)
+    handicap_spots = db.Column(db.Integer, default=0, nullable=True)
+    regular_spots = db.Column(db.Integer, default=0, nullable=True)
+    grid_rows = db.Column(db.Integer, default=5, nullable=True)
+    grid_cols = db.Column(db.Integer, default=6, nullable=True)
+    grid_layout = db.Column(db.Text, nullable=True)  # JSON representation of grid
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
+    company = db.relationship('User', backref=db.backref('company_lots', lazy=True), foreign_keys=[company_id])
     parking_spots = db.relationship('ParkingSpot', backref='parking_lot', cascade='all, delete-orphan', lazy=True)
     
     # Backward compatibility properties
@@ -63,13 +75,16 @@ class ParkingLot(db.Model):
 class ParkingSpot(db.Model):
     """
     Parking spot model for 4-wheeler parking.
-    Attributes: id, lot_id, spot_number, status (O-occupied / A-available)
+    Attributes: id, lot_id, spot_number, status (O-occupied / A-available), spot_type ('regular'/'handicap')
     """
     __tablename__ = 'parking_spots'
     
     id = db.Column(db.Integer, primary_key=True)
     lot_id = db.Column(db.Integer, db.ForeignKey('parking_lots.id'), nullable=False)
     spot_number = db.Column(db.String(20), nullable=False)
+    spot_type = db.Column(db.String(20), default='regular', nullable=False)  # 'regular' or 'handicap'
+    row_idx = db.Column(db.Integer, nullable=True)
+    col_idx = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(5), default='A', nullable=False)  # 'A' = Available, 'O' = Occupied
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -82,20 +97,21 @@ class ParkingSpot(db.Model):
         return self.lot_id
     
     def __repr__(self):
-        return f'<ParkingSpot {self.lot_id}-{self.spot_number} ({self.status})>'
+        return f'<ParkingSpot {self.lot_id}-{self.spot_number} ({self.spot_type}, {self.status})>'
 
 
 class Reservation(db.Model):
     """
     Reserve parking spot model.
     Allocates parking spot as per user requests.
-    Attributes: id, spot_id, user_id, parking_timestamp, leaving_timestamp, parking_cost, vehicle_number
+    Attributes: id, spot_id, user_id, parking_timestamp, leaving_timestamp, parking_cost, vehicle_number, spot_type
     """
     __tablename__ = 'reservations'
     
     id = db.Column(db.Integer, primary_key=True)
     spot_id = db.Column(db.Integer, db.ForeignKey('parking_spots.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    spot_type = db.Column(db.String(20), default='regular', nullable=True)  # 'regular' or 'handicap'
     parking_timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     leaving_timestamp = db.Column(db.DateTime, nullable=True)
     parking_cost = db.Column(db.Float, default=0.0, nullable=True)

@@ -1,4 +1,3 @@
-{% raw %}
 <template>
   <div class="d-flex justify-content-center align-items-center min-vh-100" style="background: linear-gradient(135deg, #42b983 0%, #359268 100%);">
     <div class="card shadow" style="max-width: 420px; width: 100%;">
@@ -141,4 +140,3 @@ export default {
   }
 }
 </script>
-{% endraw %}

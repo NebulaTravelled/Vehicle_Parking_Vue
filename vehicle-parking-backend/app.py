@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from datetime import datetime, timedelta
@@ -28,15 +29,14 @@ CORS(app)
 jwt = JWTManager(app)
 
 
-# ==================== PREDEFINED SUPERUSER ADMIN ====================
+# ==================== PREDEFINED ACCOUNTS (ADMIN & COMPANY) ====================
 
 def create_default_admin():
     """
-    Ensure the superuser Admin exists whenever the database is created.
-    There can be only one admin for the app.
-    Requires no registration.
+    Ensure the superuser Admin and a demo Company exist whenever app initializes.
     """
     with app.app_context():
+        # Superuser Admin
         admin_username = "admin"
         admin_email = "admin@example.com"
         
@@ -49,20 +49,72 @@ def create_default_admin():
                 username=admin_username,
                 email=admin_email,
                 password_hash=generate_password_hash("admin123"),
-                role='admin'
+                role='admin',
+                name="Platform Admin"
             )
             db.session.add(admin_user)
             db.session.commit()
             print("Default superuser Admin created successfully!")
+            
+        # Demo Company Operator
+        company_username = "company"
+        existing_company = User.query.filter_by(username=company_username).first()
+        if not existing_company:
+            company_user = User(
+                username=company_username,
+                email="company@parkinghub.com",
+                password_hash=generate_password_hash("company123"),
+                role='company',
+                name="Vikram Sharma",
+                company_name="Apex Parking & Mobility Solutions",
+                mobile_number="+91 98765 43210",
+                description="Specializing in multi-tier automated commercial parking lots, EV charging bays, and handicap accessible spaces across metropolitan city centers.",
+                address="Commercial Hub One, Sector 4, Outer Ring Road, Bangalore"
+            )
+            db.session.add(company_user)
+            db.session.commit()
+            print("Default Company Operator account created successfully!")
         else:
-            print("Superuser Admin already exists.")
+            company_user = existing_company
+
+        # Assign existing unassigned lots to this company and initialize default layouts
+        unassigned_lots = ParkingLot.query.filter_by(company_id=None).all()
+        for lot in unassigned_lots:
+            lot.company_id = company_user.id
+            if not lot.grid_layout:
+                # Default 5x6 layout: row 0 & 2 are parking, row 1 & 3 are roads, row 4 is parking & handicap
+                rows, cols = 5, 6
+                lot.grid_rows = rows
+                lot.grid_cols = cols
+                default_grid = []
+                p_cnt = 0
+                h_cnt = 0
+                for r in range(rows):
+                    row = []
+                    for c in range(cols):
+                        if r in [1, 3]:
+                            row.append({'type': 'road'})
+                        elif r == 4 and c in [0, 1]:
+                            row.append({'type': 'handicap'})
+                            h_cnt += 1
+                        elif r == 4 and c == cols - 1:
+                            row.append({'type': 'stairs'})
+                        else:
+                            row.append({'type': 'parking'})
+                            p_cnt += 1
+                    default_grid.append(row)
+                lot.grid_layout = json.dumps(default_grid)
+                lot.regular_spots = p_cnt
+                lot.handicap_spots = h_cnt
+                lot.number_of_spots = p_cnt + h_cnt
+        db.session.commit()
 
 
 # ==================== AUTH ROUTES ====================
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():
-    """Register a new user (Single-word username and password allowed)"""
+    """Register a new user or company operator"""
     data = request.get_json()
     
     if not data:
@@ -71,6 +123,14 @@ def register():
     username = data.get('username', '').strip()
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
+    requested_role = data.get('role', 'user').strip().lower()
+    role = 'company' if requested_role == 'company' else 'user'
+    
+    name = data.get('name', '').strip() or username
+    company_name = data.get('company_name', '').strip()
+    mobile_number = data.get('mobile_number', '').strip()
+    description = data.get('description', '').strip()
+    address = data.get('address', '').strip()
     
     if not username or not email or not password:
         return jsonify({"error": "Missing required fields: username, email, and password are required"}), 400
@@ -91,32 +151,41 @@ def register():
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already exists"}), 409
     
-    # Create new standard user
     user = User(
         username=username,
         email=email,
         password_hash=generate_password_hash(password),
-        role='user'
+        role=role,
+        name=name,
+        company_name=company_name or (name if role == 'company' else ''),
+        mobile_number=mobile_number,
+        description=description,
+        address=address
     )
     
     db.session.add(user)
     db.session.commit()
     
     return jsonify({
-        "message": "User registered successfully",
+        "message": f"{'Company operator' if role == 'company' else 'User'} registered successfully",
         "user_id": user.id,
         "user": {
             "id": user.id,
             "username": user.username,
             "email": user.email,
-            "role": user.role
+            "role": user.role,
+            "name": user.name,
+            "company_name": user.company_name,
+            "mobile_number": user.mobile_number,
+            "description": user.description,
+            "address": user.address
         }
     }), 201
 
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
-    """Login user or superuser admin and return JWT access token"""
+    """Login user, company operator, or admin and return JWT access token"""
     data = request.get_json()
     
     if not data or not data.get('username') or not data.get('password'):
@@ -134,7 +203,6 @@ def login():
     user.last_visited_at = datetime.utcnow()
     db.session.commit()
     
-    # Identity as string for pyjwt compatibility
     access_token = create_access_token(identity=str(user.id))
     
     return jsonify({
@@ -144,26 +212,59 @@ def login():
             "id": user.id,
             "username": user.username,
             "email": user.email,
-            "role": user.role
+            "role": user.role,
+            "name": user.name or user.username,
+            "company_name": user.company_name or '',
+            "mobile_number": user.mobile_number or '',
+            "description": user.description or '',
+            "address": user.address or ''
         }
     }), 200
 
 
-@app.route('/api/auth/profile', methods=['GET'])
+@app.route('/api/auth/profile', methods=['GET', 'PUT'])
+@app.route('/api/company/profile', methods=['GET', 'PUT'])
 @jwt_required()
-def get_profile():
-    """Get current user profile"""
+def handle_profile():
+    """Get or update current profile (Company, User or Admin)"""
     current_user_id = int(get_jwt_identity())
     user = User.query.get(current_user_id)
     
     if not user:
         return jsonify({"error": "User not found"}), 404
+        
+    if request.method == 'PUT':
+        data = request.get_json() or {}
+        if 'name' in data:
+            user.name = data['name'].strip()
+        if 'company_name' in data:
+            user.company_name = data['company_name'].strip()
+        if 'mobile_number' in data:
+            user.mobile_number = data['mobile_number'].strip()
+        if 'description' in data:
+            user.description = data['description'].strip()
+        if 'address' in data:
+            user.address = data['address'].strip()
+        if 'email' in data and data['email'].strip():
+            new_email = data['email'].strip().lower()
+            # Verify uniqueness if email changed
+            existing = User.query.filter(User.email == new_email, User.id != user.id).first()
+            if existing:
+                return jsonify({"error": "Email is already taken by another account"}), 409
+            user.email = new_email
+            
+        db.session.commit()
     
     return jsonify({
         "id": user.id,
         "username": user.username,
         "email": user.email,
         "role": user.role,
+        "name": user.name or user.username,
+        "company_name": user.company_name or user.username,
+        "mobile_number": user.mobile_number or '',
+        "description": user.description or '',
+        "address": user.address or '',
         "created_at": user.created_at.isoformat() if user.created_at else None
     }), 200
 
@@ -192,10 +293,107 @@ def get_admin_dashboard():
     
     total_revenue = db.session.query(db.func.sum(Reservation.parking_cost)).scalar() or 0.0
     
-    # Real-time visual spots overview grouped by lot
+    # Real-time visual spots overview grouped by lot with layout grid
     lots_detail = []
     for lot in lots:
         spots = ParkingSpot.query.filter_by(lot_id=lot.id).order_by(ParkingSpot.id.asc()).all()
+        
+        # Build coordinate lookup if set
+        spot_by_coord = {}
+        for s in spots:
+            if s.row_idx is not None and s.col_idx is not None:
+                spot_by_coord[(s.row_idx, s.col_idx)] = s
+
+        grid_data = None
+        if lot.grid_layout:
+            try:
+                grid_data = json.loads(lot.grid_layout)
+            except Exception:
+                grid_data = None
+                
+        rows = lot.grid_rows or 5
+        cols = lot.grid_cols or 6
+        
+        # If no grid_layout exists, generate a standard layout
+        if not grid_data or not isinstance(grid_data, list):
+            grid_data = []
+            p_alloc = 0
+            for r in range(rows):
+                row = []
+                for c in range(cols):
+                    if r == 1:
+                        row.append({'type': 'road'})
+                    elif r == rows - 1 and c == 0:
+                        row.append({'type': 'handicap'})
+                    elif r == rows - 1 and c == cols - 1:
+                        row.append({'type': 'stairs'})
+                    elif p_alloc < len(spots):
+                        row.append({'type': 'parking'})
+                        p_alloc += 1
+                    else:
+                        row.append({'type': 'empty'})
+                grid_data.append(row)
+            lot.grid_layout = json.dumps(grid_data)
+            lot.grid_rows = rows
+            lot.grid_cols = cols
+            db.session.commit()
+
+        # Build enriched grid with real-time slot occupancy overlay
+        roads_count = 0
+        stairs_count = 0
+        empty_count = 0
+        enriched_grid = []
+        reg_iter = iter([s for s in spots if s.spot_type != 'handicap'])
+        handi_iter = iter([s for s in spots if s.spot_type == 'handicap'])
+        all_iter = iter(spots)
+        
+        for r_idx, row in enumerate(grid_data):
+            enriched_row = []
+            for c_idx, cell in enumerate(row):
+                ctype = cell.get('type') if isinstance(cell, dict) else str(cell)
+                spot_obj = None
+                
+                if (r_idx, c_idx) in spot_by_coord:
+                    sp = spot_by_coord[(r_idx, c_idx)]
+                    spot_obj = {
+                        "id": sp.id,
+                        "spot_number": sp.spot_number,
+                        "status": sp.status,
+                        "spot_type": sp.spot_type
+                    }
+                elif ctype == 'parking':
+                    sp = next(reg_iter, None) or next(all_iter, None)
+                    if sp:
+                        spot_obj = {
+                            "id": sp.id,
+                            "spot_number": sp.spot_number,
+                            "status": sp.status,
+                            "spot_type": sp.spot_type or 'regular'
+                        }
+                elif ctype == 'handicap':
+                    sp = next(handi_iter, None) or next(all_iter, None)
+                    if sp:
+                        spot_obj = {
+                            "id": sp.id,
+                            "spot_number": sp.spot_number,
+                            "status": sp.status,
+                            "spot_type": 'handicap'
+                        }
+                elif ctype == 'road':
+                    roads_count += 1
+                elif ctype == 'stairs':
+                    stairs_count += 1
+                elif ctype == 'empty':
+                    empty_count += 1
+                    
+                enriched_row.append({
+                    "type": ctype,
+                    "row": r_idx,
+                    "col": c_idx,
+                    "spot": spot_obj
+                })
+            enriched_grid.append(enriched_row)
+            
         lots_detail.append({
             "id": lot.id,
             "prime_location_name": lot.prime_location_name,
@@ -205,11 +403,24 @@ def get_admin_dashboard():
             "number_of_spots": lot.number_of_spots,
             "available_count": sum(1 for s in spots if s.status == 'A'),
             "occupied_count": sum(1 for s in spots if s.status == 'O'),
+            "regular_spots": sum(1 for s in spots if s.spot_type != 'handicap'),
+            "handicap_spots": sum(1 for s in spots if s.spot_type == 'handicap'),
+            "regular_available": sum(1 for s in spots if s.status == 'A' and s.spot_type != 'handicap'),
+            "handicap_available": sum(1 for s in spots if s.status == 'A' and s.spot_type == 'handicap'),
+            "roads_count": roads_count,
+            "stairs_count": stairs_count,
+            "empty_count": empty_count,
+            "grid_rows": rows,
+            "grid_cols": cols,
+            "grid_layout": enriched_grid,
             "spots": [
                 {
                     "id": s.id,
                     "spot_number": s.spot_number,
-                    "status": s.status  # 'A' or 'O'
+                    "status": s.status,
+                    "spot_type": s.spot_type or 'regular',
+                    "row_idx": s.row_idx,
+                    "col_idx": s.col_idx
                 }
                 for s in spots
             ]
@@ -254,34 +465,153 @@ def get_all_users():
     }), 200
 
 
-# ==================== PARKING LOT ROUTES (CACHED) ====================
+# ==================== COMPANY & PARKING LOT ROUTES ====================
+
+@app.route('/api/company/dashboard', methods=['GET'])
+@jwt_required()
+def get_company_dashboard():
+    """
+    Company Operator Dashboard:
+    - Statistics of company's lots, spots, occupancy, and active reservations
+    - Detailed lot information including grid layouts and slot configurations
+    """
+    current_user_id = int(get_jwt_identity())
+    user = User.query.get(current_user_id)
+    if not user or user.role not in ['company', 'admin']:
+        return jsonify({"error": "Company operator or admin access required"}), 403
+        
+    if user.role == 'admin':
+        lots = ParkingLot.query.all()
+    else:
+        lots = ParkingLot.query.filter_by(company_id=user.id).all()
+        # If no lots are assigned specifically, associate existing unassigned lots
+        if not lots:
+            unassigned = ParkingLot.query.filter_by(company_id=None).all()
+            for l in unassigned:
+                l.company_id = user.id
+            if unassigned:
+                db.session.commit()
+                lots = ParkingLot.query.filter_by(company_id=user.id).all()
+                
+    lot_ids = [l.id for l in lots]
+    all_spots = ParkingSpot.query.filter(ParkingSpot.lot_id.in_(lot_ids)).all() if lot_ids else []
+    
+    total_spots = len(all_spots)
+    available_spots = sum(1 for s in all_spots if s.status == 'A')
+    occupied_spots = sum(1 for s in all_spots if s.status == 'O')
+    regular_spots = sum(1 for s in all_spots if s.spot_type != 'handicap')
+    handicap_spots = sum(1 for s in all_spots if s.spot_type == 'handicap')
+    
+    active_reservations = Reservation.query.join(ParkingSpot).filter(
+        ParkingSpot.lot_id.in_(lot_ids),
+        Reservation.status == 'active'
+    ).count() if lot_ids else 0
+    
+    total_revenue = db.session.query(db.func.sum(Reservation.parking_cost)).join(ParkingSpot).filter(
+        ParkingSpot.lot_id.in_(lot_ids)
+    ).scalar() or 0.0 if lot_ids else 0.0
+    
+    lots_detail = []
+    for lot in lots:
+        l_spots = [s for s in all_spots if s.lot_id == lot.id]
+        grid_data = None
+        if lot.grid_layout:
+            try:
+                grid_data = json.loads(lot.grid_layout)
+            except Exception:
+                grid_data = None
+                
+        lots_detail.append({
+            "id": lot.id,
+            "prime_location_name": lot.prime_location_name,
+            "name": lot.prime_location_name,
+            "price": lot.price,
+            "address": lot.address,
+            "location": lot.address,
+            "pin_code": lot.pin_code,
+            "number_of_spots": lot.number_of_spots,
+            "total_spots": lot.number_of_spots,
+            "regular_spots": sum(1 for s in l_spots if s.spot_type != 'handicap'),
+            "handicap_spots": sum(1 for s in l_spots if s.spot_type == 'handicap'),
+            "available_spots": sum(1 for s in l_spots if s.status == 'A'),
+            "occupied_spots": sum(1 for s in l_spots if s.status == 'O'),
+            "regular_available": sum(1 for s in l_spots if s.status == 'A' and s.spot_type != 'handicap'),
+            "handicap_available": sum(1 for s in l_spots if s.status == 'A' and s.spot_type == 'handicap'),
+            "grid_rows": lot.grid_rows or 5,
+            "grid_cols": lot.grid_cols or 6,
+            "grid_layout": grid_data,
+            "spots": [
+                {
+                    "id": s.id,
+                    "spot_number": s.spot_number,
+                    "status": s.status,
+                    "spot_type": s.spot_type or 'regular',
+                    "row_idx": s.row_idx,
+                    "col_idx": s.col_idx
+                }
+                for s in sorted(l_spots, key=lambda x: x.id)
+            ]
+        })
+        
+    return jsonify({
+        "statistics": {
+            "total_lots": len(lots),
+            "total_spots": total_spots,
+            "available_spots": available_spots,
+            "occupied_spots": occupied_spots,
+            "regular_spots": regular_spots,
+            "handicap_spots": handicap_spots,
+            "active_reservations": active_reservations,
+            "total_revenue": round(total_revenue, 2)
+        },
+        "lots": lots_detail
+    }), 200
+
+
+@app.route('/api/company/lots', methods=['GET'])
+@jwt_required()
+def get_company_lots():
+    """Get lots owned by current company"""
+    return get_company_dashboard()
+
 
 @app.route('/api/parking-lots', methods=['GET'])
 @cached(timeout=60, key_prefix="lots_list")
 def get_parking_lots():
     """
-    Get all parking lots with real-time available and occupied 4-wheeler spot counts.
-    Cached for high API performance.
+    Get all parking lots with real-time available and occupied spot counts,
+    including regular and handicap counts.
     """
     lots = ParkingLot.query.all()
     result = []
     
     for lot in lots:
-        available = ParkingSpot.query.filter_by(lot_id=lot.id, status='A').count()
-        occupied = ParkingSpot.query.filter_by(lot_id=lot.id, status='O').count()
+        spots = ParkingSpot.query.filter_by(lot_id=lot.id).all()
+        available = sum(1 for s in spots if s.status == 'A')
+        occupied = sum(1 for s in spots if s.status == 'O')
+        regular_avail = sum(1 for s in spots if s.status == 'A' and s.spot_type != 'handicap')
+        handicap_avail = sum(1 for s in spots if s.status == 'A' and s.spot_type == 'handicap')
+        regular_total = sum(1 for s in spots if s.spot_type != 'handicap')
+        handicap_total = sum(1 for s in spots if s.spot_type == 'handicap')
         
         result.append({
             "id": lot.id,
             "prime_location_name": lot.prime_location_name,
-            "name": lot.prime_location_name,  # Compatibility
+            "name": lot.prime_location_name,
             "price": lot.price,
             "address": lot.address,
-            "location": lot.address,          # Compatibility
+            "location": lot.address,
             "pin_code": lot.pin_code,
             "number_of_spots": lot.number_of_spots,
-            "total_spots": lot.number_of_spots, # Compatibility
+            "total_spots": lot.number_of_spots,
             "available_spots": available,
-            "occupied_spots": occupied
+            "occupied_spots": occupied,
+            "regular_spots": regular_total,
+            "handicap_spots": handicap_total,
+            "regular_available_spots": regular_avail,
+            "handicap_available_spots": handicap_avail,
+            "grid_rows": lot.grid_rows or 5,
+            "grid_cols": lot.grid_cols or 6
         })
     
     return jsonify({
@@ -292,15 +622,24 @@ def get_parking_lots():
 
 @app.route('/api/parking-lots/<int:lot_id>', methods=['GET'])
 def get_parking_lot(lot_id):
-    """Get parking lot details and its 4-wheeler parking spots"""
+    """Get parking lot details, grid structure and its parking spots"""
     lot = ParkingLot.query.get(lot_id)
     if not lot:
         return jsonify({"error": "Parking lot not found"}), 404
     
-    spots = ParkingSpot.query.filter_by(lot_id=lot.id).all()
+    spots = ParkingSpot.query.filter_by(lot_id=lot.id).order_by(ParkingSpot.id.asc()).all()
     available = sum(1 for s in spots if s.status == 'A')
     occupied = sum(1 for s in spots if s.status == 'O')
+    regular_avail = sum(1 for s in spots if s.status == 'A' and s.spot_type != 'handicap')
+    handicap_avail = sum(1 for s in spots if s.status == 'A' and s.spot_type == 'handicap')
     
+    grid_data = None
+    if lot.grid_layout:
+        try:
+            grid_data = json.loads(lot.grid_layout)
+        except Exception:
+            grid_data = None
+            
     return jsonify({
         "id": lot.id,
         "prime_location_name": lot.prime_location_name,
@@ -310,13 +649,24 @@ def get_parking_lot(lot_id):
         "location": lot.address,
         "pin_code": lot.pin_code,
         "number_of_spots": lot.number_of_spots,
+        "total_spots": lot.number_of_spots,
+        "regular_spots": sum(1 for s in spots if s.spot_type != 'handicap'),
+        "handicap_spots": sum(1 for s in spots if s.spot_type == 'handicap'),
         "available_spots": available,
         "occupied_spots": occupied,
+        "regular_available": regular_avail,
+        "handicap_available": handicap_avail,
+        "grid_rows": lot.grid_rows or 5,
+        "grid_cols": lot.grid_cols or 6,
+        "grid_layout": grid_data,
         "spots": [
             {
                 "id": s.id,
                 "spot_number": s.spot_number,
-                "status": s.status
+                "status": s.status,
+                "spot_type": s.spot_type or 'regular',
+                "row_idx": s.row_idx,
+                "col_idx": s.col_idx
             }
             for s in spots
         ]
@@ -324,157 +674,324 @@ def get_parking_lot(lot_id):
 
 
 @app.route('/api/parking-lots', methods=['POST'])
+@app.route('/api/company/lots', methods=['POST'])
 @jwt_required()
 def create_parking_lot():
     """
-    Create a new parking lot (Admin only).
-    Automatically populates the specified number of 4-wheeler parking spots.
+    Create a new parking space (Admin or Company).
+    Accepts name, cost/price, address, pin code, grid dimensions, and grid layout.
     """
     current_user_id = int(get_jwt_identity())
-    admin = User.query.get(current_user_id)
-    if not admin or admin.role != 'admin':
-        return jsonify({"error": "Admin access required"}), 403
+    user = User.query.get(current_user_id)
+    if not user or user.role not in ['admin', 'company']:
+        return jsonify({"error": "Admin or Company access required"}), 403
     
     data = request.get_json()
     if not data:
         return jsonify({"error": "Missing request body"}), 400
         
     prime_location_name = data.get('prime_location_name') or data.get('name')
-    address = data.get('address') or data.get('location')
-    pin_code = str(data.get('pin_code') or '')
+    address = data.get('address') or data.get('location') or "Main Facility"
+    pin_code = str(data.get('pin_code') or '560001')
     price = float(data.get('price', 0.0))
-    number_of_spots = int(data.get('number_of_spots') or data.get('total_spots') or 0)
+    grid_rows = int(data.get('grid_rows', 5))
+    grid_cols = int(data.get('grid_cols', 6))
+    grid_layout = data.get('grid_layout')
     
-    if not prime_location_name or not address or not pin_code or number_of_spots <= 0:
-        return jsonify({"error": "Prime location name, address, pin code, and a positive number of spots are required"}), 400
+    if not prime_location_name:
+        return jsonify({"error": "Parking space name is required"}), 400
+        
+    # Analyze clickable grid if provided
+    parking_cells = []
+    handicap_cells = []
+    parsed_layout = None
     
+    if grid_layout:
+        if isinstance(grid_layout, str):
+            try:
+                parsed_layout = json.loads(grid_layout)
+            except Exception:
+                parsed_layout = None
+        elif isinstance(grid_layout, list):
+            parsed_layout = grid_layout
+            
+        if parsed_layout:
+            for r_idx, row in enumerate(parsed_layout):
+                for c_idx, cell in enumerate(row):
+                    ctype = cell.get('type') if isinstance(cell, dict) else str(cell)
+                    if ctype == 'parking':
+                        parking_cells.append((r_idx, c_idx))
+                    elif ctype == 'handicap':
+                        handicap_cells.append((r_idx, c_idx))
+                        
+    total_slots = len(parking_cells) + len(handicap_cells)
+    
+    # If no grid layout provided, generate standard layout from number_of_spots
+    if total_slots == 0:
+        total_slots = int(data.get('number_of_spots') or data.get('total_spots') or 10)
+        grid_rows = max(3, (total_slots + 3) // 4 + 1)
+        grid_cols = 5
+        parsed_layout = []
+        p_count = 0
+        h_target = max(1, total_slots // 5)
+        for r in range(grid_rows):
+            row = []
+            for c in range(grid_cols):
+                if r == 1:
+                    row.append({'type': 'road'})
+                elif len(handicap_cells) < h_target and p_count >= (total_slots - h_target):
+                    row.append({'type': 'handicap'})
+                    handicap_cells.append((r, c))
+                elif p_count < (total_slots - h_target):
+                    row.append({'type': 'parking'})
+                    parking_cells.append((r, c))
+                    p_count += 1
+                else:
+                    row.append({'type': 'empty'})
+            parsed_layout.append(row)
+        total_slots = len(parking_cells) + len(handicap_cells)
+        
     lot = ParkingLot(
+        company_id=user.id if user.role == 'company' else None,
         prime_location_name=prime_location_name,
         price=price,
         address=address,
         pin_code=pin_code,
-        number_of_spots=number_of_spots
+        number_of_spots=total_slots,
+        regular_spots=len(parking_cells),
+        handicap_spots=len(handicap_cells),
+        grid_rows=grid_rows,
+        grid_cols=grid_cols,
+        grid_layout=json.dumps(parsed_layout) if parsed_layout else None
     )
     db.session.add(lot)
-    db.session.flush()  # Generate lot.id
+    db.session.flush()
     
-    # Automatically create the 4-wheeler parking spots
-    for i in range(1, number_of_spots + 1):
+    # Create spots
+    for i, (r, c) in enumerate(parking_cells, start=1):
         spot = ParkingSpot(
             lot_id=lot.id,
-            spot_number=f"Spot-{i}",
-            status='A'  # Available
+            spot_number=f"P-{i}",
+            spot_type='regular',
+            row_idx=r,
+            col_idx=c,
+            status='A'
+        )
+        db.session.add(spot)
+        
+    for j, (r, c) in enumerate(handicap_cells, start=1):
+        spot = ParkingSpot(
+            lot_id=lot.id,
+            spot_number=f"H-{j}",
+            spot_type='handicap',
+            row_idx=r,
+            col_idx=c,
+            status='A'
         )
         db.session.add(spot)
         
     db.session.commit()
-    
-    # Invalidate cache
     cache.invalidate_prefix("lots_list")
     
     return jsonify({
-        "message": "Parking lot created successfully",
+        "message": "Parking space created successfully",
         "id": lot.id,
-        "number_of_spots": number_of_spots
+        "number_of_spots": total_slots,
+        "regular_spots": len(parking_cells),
+        "handicap_spots": len(handicap_cells)
     }), 201
 
 
 @app.route('/api/parking-lots/<int:lot_id>', methods=['PUT'])
+@app.route('/api/company/lots/<int:lot_id>', methods=['PUT'])
 @jwt_required()
 def edit_parking_lot(lot_id):
     """
-    Edit a parking lot (Admin only).
-    Allows updating details and increasing or decreasing the number of parking spots.
+    Edit a parking lot (Admin or Company Operator).
+    Supports editing:
+    1) Name of slot/space
+    2) Cost of parking
+    3) Grid size (row and column info)
+    4) Grid space (clickable grid: parking, road, stairs, handicap)
+    The number of parking space + handicap space is added and saved as number_of_spots.
     """
     current_user_id = int(get_jwt_identity())
-    admin = User.query.get(current_user_id)
-    if not admin or admin.role != 'admin':
-        return jsonify({"error": "Admin access required"}), 403
+    user = User.query.get(current_user_id)
+    if not user or user.role not in ['admin', 'company']:
+        return jsonify({"error": "Admin or Company access required"}), 403
     
     lot = ParkingLot.query.get(lot_id)
     if not lot:
         return jsonify({"error": "Parking lot not found"}), 404
+        
+    # Check ownership if company
+    if user.role == 'company' and lot.company_id and lot.company_id != user.id:
+        return jsonify({"error": "Unauthorized to edit this parking lot"}), 403
         
     data = request.get_json()
     if not data:
         return jsonify({"error": "Missing request body"}), 400
         
-    if 'prime_location_name' in data:
-        lot.prime_location_name = data['prime_location_name']
-    elif 'name' in data:
-        lot.prime_location_name = data['name']
+    # 1) Edit name of slot / space
+    if 'prime_location_name' in data and data['prime_location_name']:
+        lot.prime_location_name = data['prime_location_name'].strip()
+    elif 'name' in data and data['name']:
+        lot.prime_location_name = data['name'].strip()
         
-    if 'address' in data:
-        lot.address = data['address']
-    elif 'location' in data:
-        lot.address = data['location']
-        
-    if 'pin_code' in data:
-        lot.pin_code = str(data['pin_code'])
-        
-    if 'price' in data:
+    # 2) Edit cost of parking
+    if 'price' in data and data['price'] is not None:
         lot.price = float(data['price'])
         
-    # Increasing or decreasing number of parking spots
-    target_spots = data.get('number_of_spots') or data.get('total_spots')
-    if target_spots is not None:
-        target_spots = int(target_spots)
-        if target_spots <= 0:
-            return jsonify({"error": "Number of spots must be at least 1"}), 400
-            
-        current_spots = ParkingSpot.query.filter_by(lot_id=lot.id).all()
-        current_count = len(current_spots)
+    if 'address' in data and data['address']:
+        lot.address = data['address'].strip()
+    elif 'location' in data and data['location']:
+        lot.address = data['location'].strip()
         
-        if target_spots > current_count:
-            # Increase spots
-            for i in range(current_count + 1, target_spots + 1):
-                new_spot = ParkingSpot(
+    if 'pin_code' in data and data['pin_code']:
+        lot.pin_code = str(data['pin_code']).strip()
+        
+    # 3) Edit grid size & 4) Edit grid space
+    grid_layout_raw = data.get('grid_layout')
+    grid_rows = data.get('grid_rows')
+    grid_cols = data.get('grid_cols')
+    
+    if grid_rows is not None:
+        lot.grid_rows = int(grid_rows)
+    if grid_cols is not None:
+        lot.grid_cols = int(grid_cols)
+        
+    if grid_layout_raw is not None:
+        parsed_layout = None
+        if isinstance(grid_layout_raw, str):
+            try:
+                parsed_layout = json.loads(grid_layout_raw)
+            except Exception:
+                parsed_layout = []
+        elif isinstance(grid_layout_raw, list):
+            parsed_layout = grid_layout_raw
+            
+        parking_cells = []
+        handicap_cells = []
+        
+        if parsed_layout:
+            for r_idx, row in enumerate(parsed_layout):
+                for c_idx, cell in enumerate(row):
+                    ctype = cell.get('type') if isinstance(cell, dict) else str(cell)
+                    if ctype == 'parking':
+                        parking_cells.append((r_idx, c_idx))
+                    elif ctype == 'handicap':
+                        handicap_cells.append((r_idx, c_idx))
+                        
+        total_slots = len(parking_cells) + len(handicap_cells)
+        if total_slots <= 0:
+            return jsonify({"error": "Grid must include at least 1 Parking space or Handicap space."}), 400
+            
+        # Check occupied spots
+        current_spots = ParkingSpot.query.filter_by(lot_id=lot.id).all()
+        occupied_spots = [s for s in current_spots if s.status == 'O']
+        if len(occupied_spots) > total_slots:
+            return jsonify({
+                "error": f"Cannot resize to {total_slots} slots. There are currently {len(occupied_spots)} occupied spots in use."
+            }), 400
+            
+        lot.grid_layout = json.dumps(parsed_layout)
+        lot.number_of_spots = total_slots
+        lot.regular_spots = len(parking_cells)
+        lot.handicap_spots = len(handicap_cells)
+        
+        # Build desired spot configurations
+        desired = []
+        for idx, (r, c) in enumerate(parking_cells, start=1):
+            desired.append({
+                "spot_number": f"P-{idx}",
+                "spot_type": "regular",
+                "row_idx": r,
+                "col_idx": c
+            })
+        for idx, (r, c) in enumerate(handicap_cells, start=1):
+            desired.append({
+                "spot_number": f"H-{idx}",
+                "spot_type": "handicap",
+                "row_idx": r,
+                "col_idx": c
+            })
+            
+        # Update existing spots safely to preserve foreign keys
+        for idx, des in enumerate(desired):
+            if idx < len(current_spots):
+                sp = current_spots[idx]
+                sp.spot_number = des["spot_number"]
+                sp.spot_type = des["spot_type"]
+                sp.row_idx = des["row_idx"]
+                sp.col_idx = des["col_idx"]
+            else:
+                new_sp = ParkingSpot(
                     lot_id=lot.id,
-                    spot_number=f"Spot-{i}",
+                    spot_number=des["spot_number"],
+                    spot_type=des["spot_type"],
+                    row_idx=des["row_idx"],
+                    col_idx=des["col_idx"],
                     status='A'
                 )
-                db.session.add(new_spot)
-        elif target_spots < current_count:
-            # Decrease spots: remove available spots only
-            diff = current_count - target_spots
-            available_spots = [s for s in current_spots if s.status == 'A']
-            if len(available_spots) < diff:
-                occupied_count = current_count - len(available_spots)
-                return jsonify({
-                    "error": f"Cannot decrease spots to {target_spots}. There are {occupied_count} occupied spots currently in use."
-                }), 400
-            
-            # Delete surplus available spots from the highest numbers down
-            available_spots.sort(key=lambda s: s.id, reverse=True)
-            for s in available_spots[:diff]:
-                db.session.delete(s)
+                db.session.add(new_sp)
                 
-        lot.number_of_spots = target_spots
+        # If surplus available spots exist, remove them
+        if len(current_spots) > len(desired):
+            surplus = current_spots[len(desired):]
+            for sp in surplus:
+                if sp.status == 'A':
+                    db.session.delete(sp)
+                    
+    elif data.get('number_of_spots') or data.get('total_spots'):
+        # Fallback manual number_of_spots change
+        target = int(data.get('number_of_spots') or data.get('total_spots'))
+        if target <= 0:
+            return jsonify({"error": "Number of spots must be at least 1"}), 400
+        current_spots = ParkingSpot.query.filter_by(lot_id=lot.id).all()
+        current_count = len(current_spots)
+        if target > current_count:
+            for i in range(current_count + 1, target + 1):
+                db.session.add(ParkingSpot(lot_id=lot.id, spot_number=f"Spot-{i}", status='A', spot_type='regular'))
+        elif target < current_count:
+            diff = current_count - target
+            avail = [s for s in current_spots if s.status == 'A']
+            if len(avail) < diff:
+                return jsonify({"error": f"Cannot decrease spots: {current_count - len(avail)} spots are currently occupied."}), 400
+            avail.sort(key=lambda s: s.id, reverse=True)
+            for s in avail[:diff]:
+                db.session.delete(s)
+        lot.number_of_spots = target
 
     db.session.commit()
-    
-    # Invalidate cache
     cache.invalidate_prefix("lots_list")
     
     return jsonify({
-        "message": "Parking lot updated successfully",
+        "message": "Parking lot and slot configuration updated successfully",
         "id": lot.id,
-        "number_of_spots": lot.number_of_spots
+        "name": lot.prime_location_name,
+        "price": lot.price,
+        "number_of_spots": lot.number_of_spots,
+        "regular_spots": lot.regular_spots,
+        "handicap_spots": lot.handicap_spots
     }), 200
 
 
 @app.route('/api/parking-lots/<int:lot_id>', methods=['DELETE'])
+@app.route('/api/company/lots/<int:lot_id>', methods=['DELETE'])
 @jwt_required()
 def delete_parking_lot(lot_id):
-    """Delete a parking lot and its spots (Admin only)"""
+    """Delete a parking lot and its spots (Admin or Company owner)"""
     current_user_id = int(get_jwt_identity())
-    admin = User.query.get(current_user_id)
-    if not admin or admin.role != 'admin':
-        return jsonify({"error": "Admin access required"}), 403
+    user = User.query.get(current_user_id)
+    if not user or user.role not in ['admin', 'company']:
+        return jsonify({"error": "Admin or Company access required"}), 403
     
     lot = ParkingLot.query.get(lot_id)
     if not lot:
         return jsonify({"error": "Parking lot not found"}), 404
+        
+    if user.role == 'company' and lot.company_id and lot.company_id != user.id:
+        return jsonify({"error": "Unauthorized to delete this parking lot"}), 403
         
     # Check if there are active reservations
     active_res = Reservation.query.join(ParkingSpot).filter(
@@ -487,8 +1004,6 @@ def delete_parking_lot(lot_id):
         
     db.session.delete(lot)
     db.session.commit()
-    
-    # Invalidate cache
     cache.invalidate_prefix("lots_list")
     
     return jsonify({"message": "Parking lot deleted successfully", "id": lot_id}), 200
@@ -502,9 +1017,10 @@ def create_reservation():
     """
     User books a parking spot:
     - User selects a parking lot
-    - Spot is automatically allotted by the app (first available spot where status == 'A')
-    - Spot status is updated to 'O' (Occupied)
-    - Reservation is recorded with parking_timestamp
+    - Users can book regular or handicap parking
+    - Spot is automatically allotted based on spot_type (regular / handicap)
+    - Spot status updated to 'O' (Occupied)
+    - Reservation recorded with parking_timestamp and spot_type
     """
     current_user_id = int(get_jwt_identity())
     data = request.get_json()
@@ -515,23 +1031,33 @@ def create_reservation():
     vehicle_number = data.get('vehicle_number', '').strip().upper()
     lot_id = data.get('lot_id') or data.get('parking_lot_id')
     remarks = data.get('remarks', '').strip()
+    requested_type = data.get('spot_type', 'regular').strip().lower()
+    if requested_type not in ['regular', 'handicap']:
+        requested_type = 'regular'
     
-    # If specific spot_id was provided (compatibility), verify it; otherwise automatically allocate
     spot = None
     if lot_id:
         lot = ParkingLot.query.get(lot_id)
         if not lot:
             return jsonify({"error": "Parking lot not found"}), 404
-        # Automatically allocate the first available spot
-        spot = ParkingSpot.query.filter_by(lot_id=lot_id, status='A').first()
+            
+        # Find first available spot matching the requested spot type
+        spot = ParkingSpot.query.filter_by(lot_id=lot_id, status='A', spot_type=requested_type).first()
+        if not spot:
+            type_label = "Handicap (Accessible)" if requested_type == 'handicap' else "Regular"
+            return jsonify({"error": f"No available {type_label} parking spots in this lot."}), 400
+            
     elif data.get('parking_spot_id') or data.get('spot_id'):
         spot_id = data.get('parking_spot_id') or data.get('spot_id')
         spot = ParkingSpot.query.get(spot_id)
         if spot and spot.status != 'A':
             spot = None
+        if not spot:
+            return jsonify({"error": "Selected spot is not available"}), 400
+        requested_type = spot.spot_type or 'regular'
             
     if not spot:
-        return jsonify({"error": "No available 4-wheeler parking spots in this lot"}), 400
+        return jsonify({"error": "No available parking spots in this lot"}), 400
         
     # Mark spot as Occupied ('O')
     spot.status = 'O'
@@ -541,6 +1067,7 @@ def create_reservation():
         spot_id=spot.id,
         user_id=current_user_id,
         vehicle_number=vehicle_number,
+        spot_type=requested_type,
         parking_timestamp=datetime.utcnow(),
         status='active',
         remarks=remarks
@@ -549,14 +1076,14 @@ def create_reservation():
     db.session.add(reservation)
     db.session.commit()
     
-    # Invalidate cache
     cache.invalidate_prefix("lots_list")
     
     return jsonify({
-        "message": "Parking spot automatically allotted and booked successfully",
+        "message": f"{'Handicap' if requested_type == 'handicap' else 'Regular'} parking spot automatically allotted and booked successfully",
         "reservation_id": reservation.id,
         "spot_id": spot.id,
         "spot_number": spot.spot_number,
+        "spot_type": spot.spot_type,
         "lot_name": spot.parking_lot.prime_location_name,
         "parking_timestamp": reservation.parking_timestamp.isoformat(),
         "status": reservation.status
@@ -641,6 +1168,7 @@ def get_reservations():
             "lot_name": lot.prime_location_name if lot else 'N/A',
             "lot_price": lot.price if lot else 0.0,
             "vehicle_number": r.vehicle_number,
+            "spot_type": r.spot_type or (spot.spot_type if spot else 'regular'),
             "parking_timestamp": r.parking_timestamp.isoformat() if r.parking_timestamp else None,
             "start_time": r.parking_timestamp.isoformat() if r.parking_timestamp else None,
             "leaving_timestamp": r.leaving_timestamp.isoformat() if r.leaving_timestamp else None,

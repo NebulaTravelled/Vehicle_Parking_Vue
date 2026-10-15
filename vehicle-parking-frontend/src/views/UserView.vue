@@ -77,7 +77,11 @@
             <div class="card-body p-4">
               <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
-                  <span class="badge bg-warning text-dark mb-2">🟢 Active Parking Spot</span>
+                  <div class="d-flex align-items-center gap-2 mb-2">
+                    <span class="badge bg-warning text-dark">🟢 Active Parking Spot</span>
+                    <span v-if="activeReservation.spot_type === 'handicap'" class="badge bg-info text-dark">♿ Handicap Spot</span>
+                    <span v-else class="badge bg-secondary">🚗 Regular Spot</span>
+                  </div>
                   <h4 class="fw-bold mb-1 text-primary">{{ activeReservation.lot_name }}</h4>
                   <p class="text-muted mb-0 small">
                     Allotted Spot: <strong class="text-dark">{{ activeReservation.spot_number }}</strong> | 
@@ -86,7 +90,7 @@
                   </p>
                 </div>
                 <div>
-                  <button class="btn btn-danger btn-lg px-4" @click="handleVacateSpot(activeReservation.id)" :disabled="vacating">
+                  <button class="btn btn-danger btn-lg px-4 shadow-sm" @click="handleVacateSpot(activeReservation.id)" :disabled="vacating">
                     {{ vacating ? 'Releasing Spot...' : '🚪 Vacate / Release Spot' }}
                   </button>
                 </div>
@@ -98,7 +102,7 @@
           <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
               <h4 class="fw-bold mb-1">Available Parking Lots</h4>
-              <p class="text-muted small mb-0">Choose a parking lot. Your 4-wheeler spot will be automatically allotted.</p>
+              <p class="text-muted small mb-0">Choose a parking lot. You can reserve Regular or Handicap accessible parking.</p>
             </div>
             <button class="btn btn-outline-success btn-sm" @click="fetchLots">🔄 Refresh Lots</button>
           </div>
@@ -111,29 +115,40 @@
 
           <div class="row g-4">
             <div v-for="lot in lots" :key="lot.id" class="col-md-6 col-lg-4">
-              <div class="card shadow-sm h-100 border-0">
+              <div class="card shadow-sm h-100 border-0 rounded-3">
                 <div class="card-body d-flex flex-column p-4">
                   <div class="d-flex justify-content-between align-items-start mb-2">
                     <h5 class="fw-bold text-primary mb-0">{{ lot.prime_location_name }}</h5>
                     <span class="badge bg-success fs-6">₹{{ lot.price }}/hr</span>
                   </div>
-                  <p class="text-muted small mb-2">{{ lot.address }}</p>
+                  <p class="text-muted small mb-1">{{ lot.address }}</p>
                   <p class="text-muted small mb-3">PIN: {{ lot.pin_code }}</p>
                   
-                  <div class="d-flex justify-content-between align-items-center p-2 bg-light rounded mb-3 small">
-                    <span>Available Spots (A):</span>
-                    <strong class="text-success">{{ lot.available_spots }} / {{ lot.number_of_spots }}</strong>
+                  <!-- Slot Type Breakdown -->
+                  <div class="bg-light p-2.5 rounded-3 mb-3 small border">
+                    <div class="d-flex justify-content-between mb-1">
+                      <span>Total Available:</span>
+                      <strong class="text-success">{{ lot.available_spots }} / {{ lot.number_of_spots }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted border-top pt-1 mt-1">
+                      <span>🚗 Regular Available:</span>
+                      <strong class="text-dark">{{ lot.regular_available_spots !== undefined ? lot.regular_available_spots : (lot.available_spots || 0) }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted">
+                      <span>♿ Handicap Available:</span>
+                      <strong class="text-primary">{{ lot.handicap_available_spots || 0 }}</strong>
+                    </div>
                   </div>
 
                   <div class="mt-auto">
                     <button
-                      class="btn btn-success w-100"
+                      class="btn btn-success w-100 py-2 fw-semibold shadow-sm"
                       :disabled="lot.available_spots === 0 || activeReservation !== null"
                       @click="openBookingModal(lot)"
                     >
-                      <span v-if="activeReservation !== null">Already have active spot</span>
-                      <span v-else-if="lot.available_spots === 0">Lot Full (0 Available)</span>
-                      <span v-else>Book Spot (Auto Allot)</span>
+                      <span v-if="activeReservation !== null">Active spot already in use</span>
+                      <span v-else-if="lot.available_spots === 0">Fully Booked (0 Available)</span>
+                      <span v-else>Book Spot (Regular / Handicap)</span>
                     </button>
                   </div>
                 </div>
@@ -184,6 +199,7 @@
                       <th>#</th>
                       <th>Location / Lot</th>
                       <th>Spot Number</th>
+                      <th>Type</th>
                       <th>Vehicle Number</th>
                       <th>Entry Time</th>
                       <th>Exit Time</th>
@@ -197,6 +213,10 @@
                       <td>{{ res.id }}</td>
                       <td class="fw-semibold text-primary">{{ res.lot_name }}</td>
                       <td><span class="badge bg-secondary">{{ res.spot_number }}</span></td>
+                      <td>
+                        <span v-if="res.spot_type === 'handicap'" class="badge bg-info text-dark">♿ Handicap</span>
+                        <span v-else class="badge bg-light text-dark border">🚗 Regular</span>
+                      </td>
                       <td class="fw-bold">{{ res.vehicle_number }}</td>
                       <td>{{ formatTime(res.parking_timestamp) }}</td>
                       <td>{{ res.leaving_timestamp ? formatTime(res.leaving_timestamp) : 'In Progress' }}</td>
@@ -218,7 +238,7 @@
                       </td>
                     </tr>
                     <tr v-if="reservations.length === 0">
-                      <td colspan="9" class="text-center py-4 text-muted">You have no parking reservations yet.</td>
+                      <td colspan="10" class="text-center py-4 text-muted">You have no parking reservations yet.</td>
                     </tr>
                   </tbody>
                 </table>
@@ -300,6 +320,48 @@
                   <div class="mt-2 text-success fw-semibold">Rate: ₹{{ selectedLot?.price }}/hour</div>
                 </div>
 
+                <!-- Spot Type Selection: Regular or Handicap -->
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Select Parking Space Type *</label>
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <div 
+                        class="border rounded-3 p-3 text-center cursor-pointer h-100 transition-card"
+                        :class="{
+                          'border-success bg-success-subtle shadow-sm ring-2': bookingForm.spot_type === 'regular',
+                          'opacity-50 pointer-events-none': (selectedLot?.regular_available_spots || 0) <= 0
+                        }"
+                        @click="(selectedLot?.regular_available_spots || 0) > 0 && (bookingForm.spot_type = 'regular')"
+                      >
+                        <div class="fs-3 mb-1">🚗</div>
+                        <div class="fw-bold text-dark">Regular Space</div>
+                        <span class="badge" :class="(selectedLot?.regular_available_spots || 0) > 0 ? 'bg-success' : 'bg-secondary'">
+                          {{ selectedLot?.regular_available_spots || 0 }} Available
+                        </span>
+                      </div>
+                    </div>
+                    <div class="col-6">
+                      <div 
+                        class="border rounded-3 p-3 text-center cursor-pointer h-100 transition-card"
+                        :class="{
+                          'border-info bg-info-subtle shadow-sm ring-2': bookingForm.spot_type === 'handicap',
+                          'opacity-50 pointer-events-none': (selectedLot?.handicap_available_spots || 0) <= 0
+                        }"
+                        @click="(selectedLot?.handicap_available_spots || 0) > 0 && (bookingForm.spot_type = 'handicap')"
+                      >
+                        <div class="fs-3 mb-1">♿</div>
+                        <div class="fw-bold text-dark">Handicap Space</div>
+                        <span class="badge" :class="(selectedLot?.handicap_available_spots || 0) > 0 ? 'bg-info text-dark' : 'bg-secondary'">
+                          {{ selectedLot?.handicap_available_spots || 0 }} Available
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="form-text small mt-1">
+                    Users can select standard 4-wheeler parking or dedicated handicap accessible parking.
+                  </div>
+                </div>
+
                 <div class="mb-3">
                   <label class="form-label fw-bold">Vehicle Registration Number *</label>
                   <input
@@ -323,7 +385,7 @@
                 </div>
 
                 <div class="alert alert-secondary small mb-0">
-                  ℹ️ The application will automatically assign the next available 4-wheeler spot upon booking.
+                  ℹ️ The system will automatically allocate the optimal available {{ bookingForm.spot_type }} spot.
                 </div>
               </div>
               <div class="modal-footer">
@@ -465,7 +527,10 @@ export default {
     },
     openBookingModal(lot) {
       this.selectedLot = lot
-      this.bookingForm = { vehicle_number: '', remarks: '' }
+      const defaultType = (lot.regular_available_spots > 0 || lot.regular_available_spots === undefined)
+        ? 'regular'
+        : (lot.handicap_available_spots > 0 ? 'handicap' : 'regular')
+      this.bookingForm = { vehicle_number: '', remarks: '', spot_type: defaultType }
       this.showBookingModal = true
     },
     async submitBooking() {
@@ -475,10 +540,12 @@ export default {
         const payload = {
           lot_id: this.selectedLot.id,
           vehicle_number: this.bookingForm.vehicle_number.trim(),
-          remarks: this.bookingForm.remarks.trim()
+          remarks: this.bookingForm.remarks.trim(),
+          spot_type: this.bookingForm.spot_type || 'regular'
         }
         const res = await axios.post('http://localhost:5000/api/reservations', payload, this.getAuthHeaders())
-        this.showAlert(`Spot "${res.data.spot_number}" automatically allotted in ${res.data.lot_name}!`)
+        const typeLabel = res.data.spot_type === 'handicap' ? 'Handicap' : 'Regular'
+        this.showAlert(`${typeLabel} spot "${res.data.spot_number}" automatically allotted in ${res.data.lot_name}!`)
         this.showBookingModal = false
         this.fetchLots()
         this.fetchReservations()

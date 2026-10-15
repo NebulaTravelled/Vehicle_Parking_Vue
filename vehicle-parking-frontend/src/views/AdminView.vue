@@ -120,40 +120,163 @@
             </div>
           </div>
 
-          <!-- Spot Matrix Overview per Parking Lot -->
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4 class="fw-bold mb-0">Live Parking Spots Grid (4-Wheeler)</h4>
-            <div class="d-flex gap-2">
-              <span class="badge bg-success py-2 px-3">🟢 A = Available</span>
-              <span class="badge bg-danger py-2 px-3">🔴 O = Occupied</span>
-              <button class="btn btn-outline-primary btn-sm ms-2" @click="fetchDashboard">🔄 Refresh Grid</button>
+          <!-- Spot Matrix Overview per Parking Lot with Roads, Handicap, Regular, Stairs & Empty Slots -->
+          <div class="card shadow-sm border-0 mb-4 p-3 bg-white">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+              <div>
+                <h4 class="fw-bold mb-0 text-dark">Live Facility Grid & Spot Status</h4>
+                <p class="text-muted small mb-0">Visual layout rendering of roads, regular bays, handicap bays, stairs, and empty slots.</p>
+              </div>
+              <button class="btn btn-outline-primary btn-sm fw-semibold" @click="fetchDashboard">
+                <i class="bi bi-arrow-clockwise me-1"></i> Refresh Grid
+              </button>
+            </div>
+
+            <!-- Complete Legend Strip -->
+            <div class="d-flex flex-wrap gap-2 pt-2 border-top small align-items-center">
+              <span class="fw-bold text-secondary me-1">Legend:</span>
+              <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1.5 rounded-pill">
+                🅿️ Regular Available
+              </span>
+              <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2.5 py-1.5 rounded-pill">
+                🅿️ Regular Occupied
+              </span>
+              <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2.5 py-1.5 rounded-pill">
+                ♿ Handicap Available
+              </span>
+              <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2.5 py-1.5 rounded-pill">
+                ♿ Handicap Occupied
+              </span>
+              <span class="badge bg-dark text-white px-2.5 py-1.5 rounded-pill">
+                🛣️ Road / Driveway
+              </span>
+              <span class="badge bg-warning text-dark px-2.5 py-1.5 rounded-pill">
+                🪜 Stairs / Exit
+              </span>
+              <span class="badge bg-light text-secondary border px-2.5 py-1.5 rounded-pill">
+                ⬜ Empty Slot
+              </span>
             </div>
           </div>
 
-          <div v-if="dashboardLots.length === 0" class="card shadow-sm text-center py-5">
+          <div v-if="dashboardLots.length === 0" class="card shadow-sm text-center py-5 border-0">
             <div class="card-body">
-              <h5>No parking lots created yet.</h5>
-              <p class="text-muted">Create a parking lot to start allocating 4-wheeler spots.</p>
+              <div class="fs-1 text-muted mb-2">🅿️</div>
+              <h5 class="fw-bold">No parking lots created yet.</h5>
+              <p class="text-muted small">Create a parking lot to start allocating spots.</p>
               <button class="btn btn-primary" @click="activeTab = 'lots'">Create Parking Lot</button>
             </div>
           </div>
 
           <div v-else class="row g-4">
-            <div v-for="lot in dashboardLots" :key="lot.id" class="col-lg-6">
-              <div class="card shadow-sm h-100">
-                <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+            <div v-for="lot in dashboardLots" :key="lot.id" class="col-12 col-xl-6">
+              <div class="card shadow-sm h-100 border-0 rounded-4 overflow-hidden">
+                
+                <!-- Facility Header -->
+                <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                   <div>
-                    <h5 class="fw-bold mb-1 text-primary">{{ lot.prime_location_name }}</h5>
-                    <span class="text-muted small">{{ lot.address }} (PIN: {{ lot.pin_code }})</span>
+                    <h5 class="fw-bold mb-0 text-primary">{{ lot.prime_location_name }}</h5>
+                    <span class="text-muted small"><i class="bi bi-geo-alt me-1"></i>{{ lot.address }} (PIN: {{ lot.pin_code }})</span>
                   </div>
-                  <div class="text-end">
-                    <span class="badge bg-light text-dark border me-1">₹{{ lot.price }}/hr</span>
-                    <span class="badge bg-success me-1">{{ lot.available_count }} Available</span>
-                    <span class="badge bg-danger">{{ lot.occupied_count }} Occupied</span>
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-light text-dark border fw-bold px-2.5 py-1.5">₹{{ lot.price }}/hr</span>
+                    <span class="badge bg-success-subtle text-success fw-bold px-2.5 py-1.5">{{ lot.available_count }} Free</span>
+                    <span class="badge bg-danger-subtle text-danger fw-bold px-2.5 py-1.5">{{ lot.occupied_count }} In Use</span>
                   </div>
                 </div>
-                <div class="card-body">
-                  <div class="d-flex flex-wrap gap-2">
+
+                <div class="card-body p-4 bg-light">
+                  <!-- Summary Pill Badges for All Elements -->
+                  <div class="d-flex flex-wrap gap-2 mb-3 small bg-white p-2.5 rounded-3 border">
+                    <span class="badge bg-light text-dark border">
+                      🚗 Regular: <strong>{{ lot.regular_available }} / {{ lot.regular_spots }}</strong> Free
+                    </span>
+                    <span class="badge bg-light text-primary border">
+                      ♿ Handicap: <strong>{{ lot.handicap_available }} / {{ lot.handicap_spots }}</strong> Free
+                    </span>
+                    <span class="badge bg-dark-subtle text-dark border">
+                      🛣️ Roads: <strong>{{ lot.roads_count || 0 }}</strong>
+                    </span>
+                    <span class="badge bg-warning-subtle text-dark border">
+                      🪜 Stairs: <strong>{{ lot.stairs_count || 0 }}</strong>
+                    </span>
+                    <span class="badge bg-light text-muted border">
+                      ⬜ Empty: <strong>{{ lot.empty_count || 0 }}</strong>
+                    </span>
+                    <span class="ms-auto text-muted small">
+                      Grid: <strong>{{ lot.grid_rows }} × {{ lot.grid_cols }}</strong>
+                    </span>
+                  </div>
+
+                  <!-- Visual Grid Canvas (Roads, Handicap, Regular, Stairs, Empty) -->
+                  <div v-if="lot.grid_layout && lot.grid_layout.length" class="admin-grid-wrapper p-3 bg-white rounded-3 border overflow-auto">
+                    <div 
+                      class="admin-grid mx-auto" 
+                      :style="{ 
+                        gridTemplateColumns: `repeat(${lot.grid_cols}, minmax(75px, 1fr))`,
+                        maxWidth: `${lot.grid_cols * 105}px` 
+                      }"
+                    >
+                      <template v-for="(row, rIdx) in lot.grid_layout" :key="'admin-r-' + rIdx">
+                        <div 
+                          v-for="(cell, cIdx) in row" 
+                          :key="'admin-cell-' + rIdx + '-' + cIdx"
+                          class="admin-cell shadow-sm"
+                          :class="getCellClasses(cell)"
+                          :title="getCellTooltip(cell, rIdx, cIdx)"
+                        >
+                          <!-- Regular Parking Space -->
+                          <div v-if="cell.type === 'parking'" class="cell-inner">
+                            <span class="cell-icon">🅿️</span>
+                            <span class="cell-title fw-bold">{{ cell.spot?.spot_number || `P-${rIdx+1},${cIdx+1}` }}</span>
+                            <span 
+                              class="cell-status-badge badge"
+                              :class="cell.spot?.status === 'O' ? 'bg-danger text-white' : 'bg-success text-white'"
+                            >
+                              {{ cell.spot?.status === 'O' ? 'Occupied' : 'Free' }}
+                            </span>
+                          </div>
+
+                          <!-- Handicap Space -->
+                          <div v-else-if="cell.type === 'handicap'" class="cell-inner">
+                            <span class="cell-icon">♿</span>
+                            <span class="cell-title fw-bold">{{ cell.spot?.spot_number || `H-${rIdx+1},${cIdx+1}` }}</span>
+                            <span 
+                              class="cell-status-badge badge"
+                              :class="cell.spot?.status === 'O' ? 'bg-warning text-dark' : 'bg-info text-dark'"
+                            >
+                              {{ cell.spot?.status === 'O' ? 'Occupied' : 'Free' }}
+                            </span>
+                          </div>
+
+                          <!-- Road / Driveway -->
+                          <div v-else-if="cell.type === 'road'" class="cell-inner">
+                            <span class="cell-icon">🛣️</span>
+                            <span class="cell-title">Road</span>
+                            <span class="cell-sub-dash">────</span>
+                          </div>
+
+                          <!-- Stairs / Exit -->
+                          <div v-else-if="cell.type === 'stairs'" class="cell-inner">
+                            <span class="cell-icon">🪜</span>
+                            <span class="cell-title">Stairs</span>
+                            <span class="cell-sub text-muted">Exit</span>
+                          </div>
+
+                          <!-- Empty Slot -->
+                          <div v-else class="cell-inner">
+                            <span class="cell-icon text-muted">⬜</span>
+                            <span class="cell-title text-muted">Empty</span>
+                            <span class="cell-sub text-muted">Slot</span>
+                          </div>
+
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+
+                  <!-- Fallback Simple Wrap for Legacy Lots -->
+                  <div v-else class="d-flex flex-wrap gap-2">
                     <div
                       v-for="spot in lot.spots"
                       :key="spot.id"
@@ -167,7 +290,9 @@
                       </div>
                     </div>
                   </div>
+
                 </div>
+
               </div>
             </div>
           </div>
@@ -564,6 +689,33 @@ export default {
       } catch (err) {
         console.error(err)
       }
+    },
+    getCellClasses(cell) {
+      const type = cell.type
+      if (type === 'parking') {
+        return cell.spot?.status === 'O' ? 'cell-parking-occupied' : 'cell-parking-available'
+      }
+      if (type === 'handicap') {
+        return cell.spot?.status === 'O' ? 'cell-handicap-occupied' : 'cell-handicap-available'
+      }
+      if (type === 'road') return 'cell-road'
+      if (type === 'stairs') return 'cell-stairs'
+      return 'cell-empty'
+    },
+    getCellTooltip(cell, rIdx, cIdx) {
+      if (cell.type === 'parking') {
+        const spotName = cell.spot?.spot_number || `P-${rIdx + 1},${cIdx + 1}`
+        const status = cell.spot?.status === 'O' ? 'Occupied (In Use)' : 'Available (Free)'
+        return `Regular Parking: ${spotName} - ${status}`
+      }
+      if (cell.type === 'handicap') {
+        const spotName = cell.spot?.spot_number || `H-${rIdx + 1},${cIdx + 1}`
+        const status = cell.spot?.status === 'O' ? 'Occupied (In Use)' : 'Available (Free)'
+        return `Handicap Parking: ${spotName} - ${status}`
+      }
+      if (cell.type === 'road') return `Driveway / Road (Row ${rIdx + 1}, Col ${cIdx + 1})`
+      if (cell.type === 'stairs') return `Stairs / Walkway Exit (Row ${rIdx + 1}, Col ${cIdx + 1})`
+      return `Empty Slot (Row ${rIdx + 1}, Col ${cIdx + 1})`
     }
   }
 }
@@ -581,5 +733,131 @@ export default {
 }
 .modal {
   z-index: 1050;
+}
+
+/* Admin Facility Grid */
+.admin-grid-wrapper {
+  background: #ffffff;
+}
+
+.admin-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-cell {
+  aspect-ratio: 1;
+  min-height: 70px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  text-align: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border: 2px solid transparent;
+}
+
+.admin-cell:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12) !important;
+}
+
+.cell-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.1;
+  width: 100%;
+}
+
+.cell-icon {
+  font-size: 1.25rem;
+}
+
+.cell-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.cell-status-badge {
+  font-size: 0.6rem;
+  padding: 2px 5px;
+  border-radius: 10px;
+  margin-top: 3px;
+}
+
+.cell-sub {
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.cell-sub-dash {
+  font-size: 0.6rem;
+  letter-spacing: -1px;
+  opacity: 0.5;
+}
+
+/* Parking Available */
+.cell-parking-available {
+  background-color: #d1e7dd;
+  border-color: #198754;
+  color: #0f5132;
+}
+
+/* Parking Occupied */
+.cell-parking-occupied {
+  background-color: #f8d7da;
+  border-color: #dc3545;
+  color: #842029;
+}
+
+/* Handicap Available */
+.cell-handicap-available {
+  background-color: #cff4fc;
+  border-color: #0dcaf0;
+  color: #055160;
+}
+
+/* Handicap Occupied */
+.cell-handicap-occupied {
+  background-color: #e2d9f3;
+  border-color: #6f42c1;
+  color: #432874;
+}
+
+/* Road / Driveway */
+.cell-road {
+  background-color: #343a40;
+  border-color: #212529;
+  color: #f8f9fa;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    rgba(255, 255, 255, 0.05) 10px,
+    rgba(255, 255, 255, 0.05) 20px
+  );
+}
+
+/* Stairs / Exit */
+.cell-stairs {
+  background-color: #fff3cd;
+  border-color: #ffc107;
+  color: #664d03;
+}
+
+/* Empty Slot */
+.cell-empty {
+  background-color: #f8f9fa;
+  border-color: #dee2e6;
+  border-style: dashed;
+  color: #adb5bd;
 }
 </style>

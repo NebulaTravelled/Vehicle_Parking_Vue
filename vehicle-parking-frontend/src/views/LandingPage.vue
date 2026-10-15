@@ -1,69 +1,311 @@
 <template>
-  <div class="landing-wrapper d-flex justify-content-center align-items-center min-vh-100 px-3">
-    <div class="landing-card text-center p-4 p-md-5 shadow-lg rounded-4 bg-white border border-light">
-      
-      <!-- Top Badge / Header -->
-      <div class="badge bg-success-subtle text-success px-3 py-2 rounded-pill fw-semibold mb-3">
-        <i class="bi bi-car-front-fill me-1"></i> Smart Parking Solution
-      </div>
-
-      <h1 class="fw-bold text-dark mb-2 display-6">Parking Management System</h1>
-      <p class="text-secondary mb-5">Streamline your parking operations and reserve spots seamlessly.</p>
-
-      <!-- Portal Cards -->
-      <div class="row g-4 justify-content-center">
-        
-        <!-- Admin Portal -->
-        <div class="col-md-6">
-          <div class="portal-card card h-100 border-0 shadow-sm p-3 text-start position-relative overflow-hidden cursor-pointer" @click="$router.push('/admin')">
-            <div class="accent-bar bg-primary"></div>
-            <div class="card-body d-flex flex-column justify-content-between">
-              <div>
-                <div class="icon-box bg-primary-subtle text-primary rounded-3 d-inline-flex align-items-center justify-content-center mb-3">
-                  <i class="bi bi-shield-lock-fill fs-4"></i>
-                </div>
-                <h3 class="card-title h5 fw-bold text-dark mb-1">Admin Portal</h3>
-                <p class="card-text text-muted small mb-4">Manage parking lots, monitor slots, and oversee user reservations.</p>
-              </div>
-              <div class="d-flex align-items-center text-primary fw-semibold small">
-                <span>Access Dashboard</span>
-                <i class="bi bi-arrow-right ms-2 transition-icon"></i>
-              </div>
-            </div>
+  <div class="landing-page-root">
+    
+    <!-- Top Navigation -->
+    <header class="navbar navbar-expand-lg navbar-light bg-white border-bottom py-3 sticky-top shadow-sm">
+      <div class="container">
+        <router-link to="/" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-dark fs-4">
+          <div class="brand-icon-box bg-success text-white rounded-3 d-flex align-items-center justify-content-center shadow-sm">
+            <i class="bi bi-p-square-fill fs-5"></i>
           </div>
-        </div>
-
-        <!-- User Portal -->
-        <div class="col-md-6">
-          <div class="portal-card card h-100 border-0 shadow-sm p-3 text-start position-relative overflow-hidden cursor-pointer" @click="$router.push('/user')">
-            <div class="accent-bar bg-success"></div>
-            <div class="card-body d-flex flex-column justify-content-between">
-              <div>
-                <div class="icon-box bg-success-subtle text-success rounded-3 d-inline-flex align-items-center justify-content-center mb-3">
-                  <i class="bi bi-person-fill fs-4"></i>
-                </div>
-                <h3 class="card-title h5 fw-bold text-dark mb-1">User Portal</h3>
-                <p class="card-text text-muted small mb-4">Find available parking spaces, make bookings, and manage active reservations.</p>
-              </div>
-              <div class="d-flex align-items-center text-success fw-semibold small">
-                <span>Book a Spot</span>
-                <i class="bi bi-arrow-right ms-2 transition-icon"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Footer Register Link -->
-      <div class="mt-5 pt-3 border-top">
-        <span class="text-muted">New to the platform? </span>
-        <router-link to="/register" class="fw-bold text-success text-decoration-none hover-underline">
-          Create an account <i class="bi bi-chevron-right small"></i>
+          <span>Smart<span class="text-success">Park</span></span>
         </router-link>
-      </div>
 
-    </div>
+        <div class="d-flex align-items-center gap-2">
+          <router-link to="/user" class="btn btn-outline-success btn-sm fw-semibold rounded-pill px-3">
+            <i class="bi bi-car-front-fill me-1"></i> User Portal
+          </router-link>
+          <router-link to="/company" class="btn btn-primary btn-sm fw-semibold rounded-pill px-3 shadow-sm">
+            <i class="bi bi-building me-1"></i> Company Portal
+          </router-link>
+          <router-link to="/admin" class="btn btn-outline-secondary btn-sm fw-semibold rounded-pill px-3 d-none d-md-inline-block">
+            <i class="bi bi-shield-lock-fill me-1"></i> Admin
+          </router-link>
+        </div>
+      </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero-section text-center py-5 px-3 position-relative overflow-hidden">
+      <div class="container py-4">
+        
+        
+
+        <!-- Main Headline -->
+        <h1 class="hero-headline fw-bolder text-dark mb-3 display-4">
+          Effortless Parking for Drivers, <br class="d-none d-md-inline">
+          <span class="gradient-text">Complete Control for Companies</span>
+        </h1>
+
+        <!-- Subtitle -->
+        <p class="hero-subtext text-secondary mx-auto mb-4 lead" style="max-width: 720px;">
+          Reserve regular or handicap accessible parking spaces instantly. Empower parking facility operators to design interactive slot grids, customize tariffs, and streamline physical space operations.
+        </p>
+
+        <!-- CTA Buttons -->
+        <div class="d-flex justify-content-center gap-3 flex-wrap mb-5">
+          <router-link to="/user" class="btn btn-success btn-lg px-4 py-2.5 rounded-pill fw-semibold shadow d-flex align-items-center gap-2">
+            <i class="bi bi-geo-alt-fill"></i>
+            <span>Find & Book Parking</span>
+          </router-link>
+          <router-link to="/company" class="btn btn-primary btn-lg px-4 py-2.5 rounded-pill fw-semibold shadow d-flex align-items-center gap-2">
+            <i class="bi bi-grid-3x3-gap-fill"></i>
+            <span>Company Slot Designer</span>
+          </router-link>
+        </div>
+
+        <!-- Quick Platform Stats Pill Strip -->
+        <div class="row g-3 justify-content-center max-w-900 mx-auto">
+          <div class="col-6 col-md-3">
+            <div class="stat-pill bg-white border rounded-4 p-3 shadow-sm text-center">
+              <div class="fs-4 fw-bold text-success">100%</div>
+              <div class="small text-muted fw-semibold">Auto-Allotment</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="stat-pill bg-white border rounded-4 p-3 shadow-sm text-center">
+              <div class="fs-4 fw-bold text-primary">♿ Accessible</div>
+              <div class="small text-muted fw-semibold">Handicap Bays</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="stat-pill bg-white border rounded-4 p-3 shadow-sm text-center">
+              <div class="fs-4 fw-bold text-dark">Interactive</div>
+              <div class="small text-muted fw-semibold">Clickable Grid</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="stat-pill bg-white border rounded-4 p-3 shadow-sm text-center">
+              <div class="fs-4 fw-bold text-warning-emphasis">Real-Time</div>
+              <div class="small text-muted fw-semibold">Live Occupancy</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Dedicated Portals Section -->
+    <section class="py-5 bg-white border-top border-bottom">
+      <div class="container py-3">
+        
+        <div class="text-center mb-5">
+          <h2 class="fw-bold text-dark display-6">Choose Your Portal</h2>
+          <p class="text-muted">Select an access gateway designed specifically for your operational role.</p>
+        </div>
+
+        <div class="row g-4 justify-content-center">
+          
+          <!-- Portal 1: User Portal -->
+          <div class="col-lg-4 col-md-6">
+            <div 
+              class="portal-card card h-100 border-0 shadow-sm rounded-4 p-4 text-start position-relative overflow-hidden cursor-pointer"
+              @click="$router.push('/user')"
+            >
+              <div class="card-accent-bar bg-success"></div>
+              <div class="card-body p-0 d-flex flex-column justify-content-between h-100">
+                <div>
+                  <div class="portal-badge bg-success-subtle text-success fw-bold small px-3 py-1 rounded-pill d-inline-block mb-3">
+                    Drivers & Commuters
+                  </div>
+                  <div class="portal-icon-circle bg-success text-white rounded-3 d-flex align-items-center justify-content-center mb-3 shadow-sm">
+                    <i class="bi bi-car-front-fill fs-3"></i>
+                  </div>
+                  <h3 class="h4 fw-bold text-dark mb-2">User Portal</h3>
+                  <p class="text-secondary small mb-4">
+                    Find available lots across prime locations, reserve regular or handicap accessible parking, track your active vehicle session, and vacate with instant digital billing.
+                  </p>
+
+                  <ul class="list-unstyled text-muted small mb-4">
+                    <li class="mb-2"><i class="bi bi-check2-circle text-success me-2"></i>Automatic 4-wheeler spot allotment</li>
+                    <li class="mb-2"><i class="bi bi-check2-circle text-success me-2"></i>Dedicated handicap parking selection</li>
+                    <li class="mb-2"><i class="bi bi-check2-circle text-success me-2"></i>CSV parking history exports</li>
+                  </ul>
+                </div>
+
+                <div class="d-flex align-items-center text-success fw-bold pt-3 border-top">
+                  <span>Enter User Portal</span>
+                  <i class="bi bi-arrow-right ms-2 transition-arrow"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Portal 2: Company Portal (NEW!) -->
+          <div class="col-lg-4 col-md-6">
+            <div 
+              class="portal-card card h-100 border-0 shadow-sm rounded-4 p-4 text-start position-relative overflow-hidden cursor-pointer featured-portal"
+              @click="$router.push('/company')"
+            >
+              <div class="card-accent-bar bg-primary"></div>
+              <div class="card-body p-0 d-flex flex-column justify-content-between h-100">
+                <div>
+                  <div class="portal-badge bg-primary-subtle text-primary fw-bold small px-3 py-1 rounded-pill d-inline-block mb-3">
+                    Parking Facility Operators
+                  </div>
+                  <div class="portal-icon-circle bg-primary text-white rounded-3 d-flex align-items-center justify-content-center mb-3 shadow-sm">
+                    <i class="bi bi-building fs-3"></i>
+                  </div>
+                  <h3 class="h4 fw-bold text-dark mb-2">Company Portal</h3>
+                  <p class="text-secondary small mb-4">
+                    Complete facility management. Design clickable grids with row/column sizing, customize parking, road, stairs, and handicap slots, configure hourly tariffs, and update company profile.
+                  </p>
+
+                  <ul class="list-unstyled text-muted small mb-4">
+                    <li class="mb-2"><i class="bi bi-check2-circle text-primary me-2"></i>"Edit Slots" interactive clickable grid</li>
+                    <li class="mb-2"><i class="bi bi-check2-circle text-primary me-2"></i>Auto-counts regular & handicap capacity</li>
+                    <li class="mb-2"><i class="bi bi-check2-circle text-primary me-2"></i>Profile editor: description, mobile, name</li>
+                  </ul>
+                </div>
+
+                <div class="d-flex align-items-center text-primary fw-bold pt-3 border-top">
+                  <span>Enter Company Portal</span>
+                  <i class="bi bi-arrow-right ms-2 transition-arrow"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Portal 3: Admin Portal -->
+          <div class="col-lg-4 col-md-6">
+            <div 
+              class="portal-card card h-100 border-0 shadow-sm rounded-4 p-4 text-start position-relative overflow-hidden cursor-pointer"
+              @click="$router.push('/admin')"
+            >
+              <div class="card-accent-bar bg-dark"></div>
+              <div class="card-body p-0 d-flex flex-column justify-content-between h-100">
+                <div>
+                  <div class="portal-badge bg-secondary-subtle text-dark fw-bold small px-3 py-1 rounded-pill d-inline-block mb-3">
+                    Superuser Root Admin
+                  </div>
+                  <div class="portal-icon-circle bg-dark text-white rounded-3 d-flex align-items-center justify-content-center mb-3 shadow-sm">
+                    <i class="bi bi-shield-lock-fill fs-3"></i>
+                  </div>
+                  <h3 class="h4 fw-bold text-dark mb-2">Admin Portal</h3>
+                  <p class="text-secondary small mb-4">
+                    Oversee total platform utilization, inspect all physical lots, monitor real-time occupied vs available spots, trigger automated digest reminders, and view performance cache metrics.
+                  </p>
+
+                  <ul class="list-unstyled text-muted small mb-4">
+                    <li class="mb-2"><i class="bi bi-check2-circle text-dark me-2"></i>Real-time spot matrix diagnostics</li>
+                    <li class="mb-2"><i class="bi bi-check2-circle text-dark me-2"></i>Daily reminder & webhook notifications</li>
+                    <li class="mb-2"><i class="bi bi-check2-circle text-dark me-2"></i>In-memory caching performance metrics</li>
+                  </ul>
+                </div>
+
+                <div class="d-flex align-items-center text-dark fw-bold pt-3 border-top">
+                  <span>Enter Admin Portal</span>
+                  <i class="bi bi-arrow-right ms-2 transition-arrow"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Registration Link Strip -->
+        <div class="text-center mt-5 pt-4">
+          <p class="text-muted mb-0">
+            Need an account?
+            <router-link to="/register" class="fw-bold text-success text-decoration-none ms-1 hover-underline">
+              Register as standard User <i class="bi bi-arrow-right small"></i>
+            </router-link>
+            <span class="mx-2 text-muted">|</span>
+            <router-link to="/company" class="fw-bold text-primary text-decoration-none hover-underline">
+              Register as Company Operator <i class="bi bi-arrow-right small"></i>
+            </router-link>
+          </p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Feature Spotlight: The Clickable Grid & Handicap Parking -->
+    <section class="py-5 bg-light">
+      <div class="container py-3">
+        <div class="row g-5 align-items-center">
+          
+          <div class="col-lg-6">
+            <span class="badge bg-primary-subtle text-primary fw-bold px-3 py-1.5 rounded-pill mb-3">
+              Interactive Grid Designer
+            </span>
+            <h2 class="fw-bold text-dark mb-3">Empowering Operators with Visual Slot Layouts</h2>
+            <p class="text-secondary mb-4">
+              Parking lot layouts shouldn't be arbitrary numbers. With our company portal, operators can visually define parking rows and columns, place driving lanes, stairwells, regular bays, and handicap spaces on an interactive canvas.
+            </p>
+
+            <div class="row g-3">
+              <div class="col-sm-6">
+                <div class="bg-white p-3 rounded-3 border shadow-sm">
+                  <div class="fs-4 mb-1">🅿️ / ♿</div>
+                  <h6 class="fw-bold mb-1">Dual Slot Types</h6>
+                  <p class="text-muted small mb-0">Total slots are automatically computed as Regular + Handicap spaces.</p>
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <div class="bg-white p-3 rounded-3 border shadow-sm">
+                  <div class="fs-4 mb-1">🛣️ / 🪜</div>
+                  <h6 class="fw-bold mb-1">Roadways & Stairs</h6>
+                  <p class="text-muted small mb-0">Paint driving lanes and pedestrian stairs to match real layout geometry.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Interactive Grid Visual Preview Mockup -->
+          <div class="col-lg-6">
+            <div class="card shadow rounded-4 border-0 p-3 bg-white">
+              <div class="d-flex justify-content-between align-items-center mb-3 px-1">
+                <span class="fw-bold small text-secondary"><i class="bi bi-grid-3x3 me-1"></i> Interactive Layout Preview</span>
+                <span class="badge bg-success-subtle text-success">8 Slots Saved</span>
+              </div>
+
+              <!-- Mock Grid -->
+              <div class="mock-grid">
+                <div class="mock-cell cell-parking">🅿️ P-1</div>
+                <div class="mock-cell cell-parking">🅿️ P-2</div>
+                <div class="mock-cell cell-handicap">♿ H-1</div>
+                <div class="mock-cell cell-stairs">🪜 Exit</div>
+
+                <div class="mock-cell cell-road">🛣️ Road</div>
+                <div class="mock-cell cell-road">🛣️ Road</div>
+                <div class="mock-cell cell-road">🛣️ Road</div>
+                <div class="mock-cell cell-road">🛣️ Road</div>
+
+                <div class="mock-cell cell-parking">🅿️ P-3</div>
+                <div class="mock-cell cell-parking">🅿️ P-4</div>
+                <div class="mock-cell cell-parking">🅿️ P-5</div>
+                <div class="mock-cell cell-handicap">♿ H-2</div>
+              </div>
+
+              <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top small text-muted">
+                <span>🚗 Regular: <strong>6</strong> | ♿ Handicap: <strong>2</strong></span>
+                <span class="text-primary fw-semibold">Clickable on Company Portal</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white py-4 border-top">
+      <div class="container d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-car-front-fill text-success fs-5"></i>
+          <span class="fw-bold">SmartPark Enterprise</span>
+          <span class="text-secondary small ms-2">© 2026 All Rights Reserved</span>
+        </div>
+        <div class="d-flex gap-4 small text-secondary">
+          <router-link to="/user" class="text-white-50 text-decoration-none hover-white">User Portal</router-link>
+          <router-link to="/company" class="text-white-50 text-decoration-none hover-white">Company Portal</router-link>
+          <router-link to="/admin" class="text-white-50 text-decoration-none hover-white">Admin Portal</router-link>
+          <router-link to="/register" class="text-white-50 text-decoration-none hover-white">Register</router-link>
+        </div>
+      </div>
+    </footer>
+
   </div>
 </template>
 
@@ -74,47 +316,98 @@ export default {
 </script>
 
 <style scoped>
-.landing-wrapper {
-  background: linear-gradient(135deg, #f5f7fa 0%, #e4e9f2 100%);
+.landing-page-root {
+  background-color: #fafbfc;
   min-height: 100vh;
 }
 
-.landing-card {
-  max-width: 800px;
-  width: 100%;
+.brand-icon-box {
+  width: 36px;
+  height: 36px;
 }
 
-.portal-card {
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  background: #fafbfc;
-  border: 1px solid #edf2f7 !important;
+.hero-section {
+  background: radial-gradient(circle at 50% 10%, rgba(25, 135, 84, 0.08) 0%, rgba(13, 110, 253, 0.03) 50%, #fafbfc 100%);
 }
 
-.portal-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08) !important;
-  background: #ffffff;
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #198754;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7);
+  animation: pulse 2s infinite;
 }
 
-.portal-card:hover .transition-icon {
-  transform: translateX(4px);
+@keyframes pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(25, 135, 84, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(25, 135, 84, 0);
+  }
 }
 
-.transition-icon {
+.gradient-text {
+  background: linear-gradient(135deg, #0d6efd 0%, #198754 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.max-w-900 {
+  max-width: 900px;
+}
+
+.stat-pill {
   transition: transform 0.2s ease;
 }
 
-.accent-bar {
+.stat-pill:hover {
+  transform: translateY(-3px);
+}
+
+/* Portal Cards */
+.portal-card {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  background: #ffffff;
+  border: 1px solid #e9ecef !important;
+}
+
+.portal-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.09) !important;
+}
+
+.featured-portal {
+  border: 2px solid #0d6efd !important;
+}
+
+.portal-card:hover .transition-arrow {
+  transform: translateX(6px);
+}
+
+.transition-arrow {
+  transition: transform 0.2s ease;
+}
+
+.card-accent-bar {
   position: absolute;
   top: 0;
   left: 0;
-  width: 4px;
-  height: 100%;
+  width: 100%;
+  height: 4px;
 }
 
-.icon-box {
-  width: 48px;
-  height: 48px;
+.portal-icon-circle {
+  width: 56px;
+  height: 56px;
 }
 
 .cursor-pointer {
@@ -123,5 +416,51 @@ export default {
 
 .hover-underline:hover {
   text-decoration: underline !important;
+}
+
+.hover-white:hover {
+  color: #ffffff !important;
+}
+
+/* Mock Grid Preview */
+.mock-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.mock-cell {
+  aspect-ratio: 1.4;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.cell-parking {
+  background-color: #d1e7dd;
+  border-color: #198754;
+  color: #0f5132;
+}
+
+.cell-handicap {
+  background-color: #cff4fc;
+  border-color: #0dcaf0;
+  color: #055160;
+}
+
+.cell-road {
+  background-color: #343a40;
+  border-color: #212529;
+  color: #f8f9fa;
+}
+
+.cell-stairs {
+  background-color: #fff3cd;
+  border-color: #ffc107;
+  color: #664d03;
 }
 </style>
