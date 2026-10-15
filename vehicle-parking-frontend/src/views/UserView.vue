@@ -155,7 +155,7 @@
                 <div class="d-flex gap-2">
                   <button class="btn btn-outline-primary btn-sm" @click="fetchReservations">🔄 Refresh</button>
                   <button class="btn btn-primary btn-sm" @click="handleExportCsv" :disabled="exporting">
-                    {{ exporting ? 'Generating CSV...' : '📥 Export as CSV (Async Job)' }}
+                    {{ exporting ? 'Generating CSV...' : 'Export as CSV' }}
                   </button>
                 </div>
               </div>
