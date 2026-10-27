@@ -15,7 +15,7 @@ os.makedirs(EXPORTS_DIR, exist_ok=True)
 def _process_csv_export(app, user_id, job_id):
     """Background worker task to export user parking reservations to CSV"""
     with app.app_context():
-        job = ExportJob.query.get(job_id)
+        job = db.session.get(ExportJob, job_id)
         if not job:
             return
             
@@ -31,18 +31,19 @@ def _process_csv_export(app, user_id, job_id):
             
             with open(filepath, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                # Header row matching specification
+                # Header row matching specification & detailed hierarchy audit
                 writer.writerow([
                     'Reservation ID',
-                    'Spot ID',
+                    'Location Hierarchy',
+                    'Venue / Facility',
+                    'Floor Name',
                     'Spot Number',
-                    'Lot ID',
-                    'Prime Location Name',
-                    'Address',
-                    'Pin Code',
+                    'Spot Type',
                     'Vehicle Number',
+                    'Vehicle Type',
                     'Parking Timestamp (UTC)',
                     'Leaving Timestamp (UTC)',
+                    'Duration',
                     'Hourly Price',
                     'Parking Cost',
                     'Status',
@@ -52,17 +53,22 @@ def _process_csv_export(app, user_id, job_id):
                 for res in reservations:
                     spot = res.parking_spot
                     lot = spot.parking_lot if spot else None
+                    venue = res.venue_name or (lot.prime_location_name if lot else 'N/A')
+                    floor = res.floor_name or (spot.floor_name if spot else 'Ground Floor')
+                    spot_no = res.spot_number or (spot.spot_number if spot else 'N/A')
+                    hierarchy = res.location_hierarchy or f"{venue} → {floor} → {spot_no}"
                     writer.writerow([
                         res.id,
-                        res.spot_id,
-                        spot.spot_number if spot else 'N/A',
-                        lot.id if lot else 'N/A',
-                        lot.prime_location_name if lot else 'N/A',
-                        lot.address if lot else 'N/A',
-                        lot.pin_code if lot else 'N/A',
+                        hierarchy,
+                        venue,
+                        floor,
+                        spot_no,
+                        res.spot_type or (spot.spot_type if spot else 'regular'),
                         res.vehicle_number,
+                        res.vehicle_type or 'Car',
                         res.parking_timestamp.strftime('%Y-%m-%d %H:%M:%S') if res.parking_timestamp else '',
                         res.leaving_timestamp.strftime('%Y-%m-%d %H:%M:%S') if res.leaving_timestamp else 'In Use',
+                        res.duration_formatted or (f"{round(res.duration_seconds/60)}m" if res.duration_seconds else 'Active'),
                         lot.price if lot else 0.0,
                         res.parking_cost if res.parking_cost is not None else 0.0,
                         res.status,
@@ -185,7 +191,7 @@ def generate_user_monthly_report(user_id, year=None, month=None):
     else:
         end_date = datetime(year, month + 1, 1)
         
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return None
         

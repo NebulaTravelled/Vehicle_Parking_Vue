@@ -43,6 +43,15 @@
           <li class="nav-item">
             <button
               class="nav-link"
+              :class="{ active: activeTab === 'garage' }"
+              @click="activeTab = 'garage'"
+            >
+              🚘 My Garage <span v-if="vehicles.length" class="badge bg-secondary ms-1">{{ vehicles.length }}</span>
+            </button>
+          </li>
+          <li class="nav-item">
+            <button
+              class="nav-link"
               :class="{ active: activeTab === 'reservations' }"
               @click="activeTab = 'reservations'"
             >
@@ -88,7 +97,14 @@
                   <div class="card-body p-3 d-flex flex-column justify-content-between">
                     <div>
                       <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="badge bg-warning text-dark">🟢 Active</span>
+                        <div class="d-flex align-items-center gap-1">
+                          <span class="badge" :class="res.status === 'scheduled' ? 'bg-info text-dark' : 'bg-warning text-dark'">
+                            {{ res.status === 'scheduled' ? '📅 Scheduled' : '🟢 Active' }}
+                          </span>
+                          <span class="badge bg-light text-secondary border">
+                            {{ res.booking_type === 'scheduled' ? 'Advance Pre-Book' : 'Park Now' }}
+                          </span>
+                        </div>
                         <span v-if="res.spot_type === 'handicap'" class="badge bg-info text-dark">♿ Handicap</span>
                         <span v-else class="badge bg-secondary">🚗 Regular</span>
                       </div>
@@ -96,6 +112,12 @@
                       <h5 class="fw-bold text-primary mb-1">{{ res.lot_name }}</h5>
                       <div class="badge bg-light text-secondary border mb-2">
                         🏢 {{ res.floor_name || 'Ground Floor' }}
+                      </div>
+
+                      <!-- Scheduled Window Info -->
+                      <div v-if="res.booking_type === 'scheduled' && res.scheduled_start_time" class="p-2 bg-primary-subtle rounded-3 small mb-2 text-primary">
+                        <div class="fw-semibold">📅 Reserved Window:</div>
+                        <div>{{ formatTime(res.scheduled_start_time) }} ➔ {{ formatTime(res.scheduled_end_time) }}</div>
                       </div>
 
                       <div class="bg-light p-2.5 rounded-3 border small mb-3">
@@ -161,11 +183,15 @@
                   <p class="text-muted small mb-1">{{ lot.address }}</p>
                   <p class="text-muted small mb-2">PIN: {{ lot.pin_code }}</p>
                   
-                  <!-- Floor Count Badge -->
-                  <div class="mb-2">
+                  <!-- Floor Count & Dynamic Pricing Badges -->
+                  <div class="d-flex flex-wrap gap-1 mb-2">
                     <span class="badge bg-secondary-subtle text-secondary border">
                       🏢 {{ lot.floor_count || (lot.floors ? lot.floors.length : 1) }} Floor{{ (lot.floor_count || 1) > 1 ? 's' : '' }}
                     </span>
+                    <span class="badge bg-light text-secondary border">⏱️ {{ lot.grace_period_minutes !== undefined ? lot.grace_period_minutes : 15 }}m Grace</span>
+                    <span v-if="lot.daily_rate" class="badge bg-light text-success border">🛡️ ₹{{ lot.daily_rate }}/day Cap</span>
+                    <span v-if="lot.overnight_rate" class="badge bg-light text-primary border">🌙 ₹{{ lot.overnight_rate }} Night</span>
+                    <span v-if="lot.peak_multiplier > 1" class="badge bg-light text-warning-emphasis border">⚡ {{ lot.peak_multiplier }}x Peak</span>
                   </div>
 
                   <!-- Slot Type Breakdown -->
@@ -201,20 +227,134 @@
 
         </div>
 
+        <!-- ==================== TAB: CUSTOMER GARAGE ==================== -->
+        <div v-if="activeTab === 'garage'">
+          <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body p-4">
+              <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div>
+                  <h4 class="fw-bold mb-1 d-flex align-items-center gap-2">
+                    <span>🚘 My Vehicle Garage</span>
+                    <span class="badge bg-primary fs-6">{{ vehicles.length }} Saved</span>
+                  </h4>
+                  <p class="text-muted small mb-0">Register your personal and family vehicles for seamless 1-click spot reservations.</p>
+                </div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-outline-primary btn-sm" @click="fetchVehicles">🔄 Refresh</button>
+                  <button class="btn btn-success btn-sm fw-semibold" @click="openAddVehicleModal">
+                    ➕ Add Vehicle
+                  </button>
+                </div>
+              </div>
+
+              <!-- Vehicle Cards Grid -->
+              <div v-if="vehicles.length === 0" class="text-center py-5 bg-light rounded-4 border">
+                <div class="fs-1 mb-2">🚗</div>
+                <h5 class="fw-bold text-dark">No vehicles registered yet</h5>
+                <p class="text-muted small mb-3">Add your Car, SUV, EV, or Motorcycle to enable instant quick-booking without typing license plates.</p>
+                <button class="btn btn-primary btn-sm fw-semibold" @click="openAddVehicleModal">
+                  ➕ Add First Vehicle to Garage
+                </button>
+              </div>
+
+              <div v-else class="row g-3">
+                <div v-for="v in vehicles" :key="v.id" class="col-md-6 col-lg-4">
+                  <div 
+                    class="card h-100 border transition-card shadow-sm rounded-3 overflow-hidden"
+                    :class="v.is_default ? 'border-primary border-2 bg-primary-subtle bg-opacity-10' : 'border-light-subtle bg-white'"
+                  >
+                    <div class="card-body p-3 d-flex flex-column justify-content-between">
+                      <div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                          <span class="badge rounded-pill" :class="getVehicleBadgeClass(v.vehicle_type)">
+                            {{ getVehicleTypeIcon(v.vehicle_type) }} {{ v.vehicle_type }}
+                          </span>
+                          <span v-if="v.is_default" class="badge bg-primary text-white rounded-pill px-2.5">
+                            ⭐ Default Vehicle
+                          </span>
+                        </div>
+
+                        <h4 class="fw-bold text-dark font-monospace mb-1">{{ v.license_plate }}</h4>
+                        <div class="text-primary fw-semibold small mb-2">{{ v.nickname || 'Unnamed Vehicle' }}</div>
+                        <div class="text-muted small">Registered: {{ formatTime(v.created_at) }}</div>
+                      </div>
+
+                      <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top gap-1">
+                        <button 
+                          v-if="!v.is_default"
+                          class="btn btn-xs btn-outline-secondary"
+                          @click="setVehicleDefault(v)"
+                          title="Set as Default Vehicle"
+                        >
+                          ⭐ Set Default
+                        </button>
+                        <span v-else class="text-primary small fw-semibold">
+                          <i class="bi bi-check-circle-fill me-1"></i>Primary
+                        </span>
+
+                        <div class="d-flex gap-1 ms-auto">
+                          <button class="btn btn-xs btn-outline-primary" @click="openEditVehicleModal(v)">
+                            ✏️ Edit
+                          </button>
+                          <button class="btn btn-xs btn-outline-danger" @click="deleteVehicle(v.id)">
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
         <!-- ==================== TAB 2: MY RESERVATIONS ==================== -->
         <div v-if="activeTab === 'reservations'">
           <div class="card shadow-sm border-0">
             <div class="card-body p-4">
               <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                 <div>
-                  <h4 class="fw-bold mb-1">My Parking Reservations</h4>
-                  <p class="text-muted small mb-0">Full record of your parking sessions, timestamps, and fees.</p>
+                  <h4 class="fw-bold mb-1">My Parking Reservations & Audit Trail</h4>
+                  <p class="text-muted small mb-0">Detailed location hierarchy (Venue → Floor → Spot), vehicle tags, and durations.</p>
                 </div>
                 <div class="d-flex gap-2">
                   <button class="btn btn-outline-primary btn-sm" @click="fetchReservations">🔄 Refresh</button>
                   <button class="btn btn-primary btn-sm" @click="handleExportCsv" :disabled="exporting">
                     {{ exporting ? 'Generating CSV...' : 'Export as CSV' }}
                   </button>
+                </div>
+              </div>
+
+              <!-- Search and Filter Bar -->
+              <div class="row g-2 mb-3 bg-light p-2.5 rounded-3 border">
+                <div class="col-md-5">
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i> 🔍</span>
+                    <input 
+                      v-model="resSearchQuery" 
+                      type="text" 
+                      class="form-control" 
+                      placeholder="Search venue, floor, spot, license plate, or hierarchy..."
+                    />
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <select v-model="resVenueFilter" class="form-select form-select-sm">
+                    <option value="all">All Venues / Facilities</option>
+                    <option v-for="venue in uniqueVenues" :key="venue" :value="venue">{{ venue }}</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <select v-model="resStatusFilter" class="form-select form-select-sm">
+                    <option value="all">All Statuses</option>
+                    <option value="active">Active (In Use)</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+                <div class="col-md-2 text-end text-muted small d-flex align-items-center justify-content-end">
+                  Showing <strong>{{ filteredReservations.length }}</strong> of {{ reservations.length }}
                 </div>
               </div>
 
@@ -234,58 +374,88 @@
                 </a>
               </div>
 
-              <!-- Reservations Table -->
+              <!-- Reservations Table with Full Location Hierarchy -->
               <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                   <thead class="table-light">
                     <tr>
                       <th>#</th>
-                      <th>Location / Lot</th>
-                      <th>Floor</th>
-                      <th>Spot Number</th>
-                      <th>Type</th>
-                      <th>Vehicle Number</th>
+                      <th>Location Hierarchy (Venue → Floor → Spot)</th>
+                      <th>Vehicle</th>
+                      <th>Space Type</th>
+                      <th>Booking Mode</th>
                       <th>Entry Time</th>
                       <th>Exit Time</th>
-                      <th>Cost</th>
+                      <th>Duration</th>
+                      <th>Total Cost</th>
                       <th>Status</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="res in reservations" :key="res.id">
+                    <tr v-for="res in filteredReservations" :key="res.id">
                       <td>{{ res.id }}</td>
-                      <td class="fw-semibold text-primary">{{ res.lot_name }}</td>
                       <td>
-                        <span class="badge bg-light text-secondary border">🏢 {{ res.floor_name || 'Ground Floor' }}</span>
+                        <div class="fw-semibold text-dark">
+                          🏢 <span class="text-primary">{{ res.venue_name || res.lot_name }}</span>
+                          <span class="text-muted mx-1">→</span>
+                          <span class="badge bg-light text-secondary border">🏢 {{ res.floor_name || 'Ground Floor' }}</span>
+                          <span class="text-muted mx-1">→</span>
+                          <span class="badge bg-secondary font-monospace">{{ res.spot_number }}</span>
+                        </div>
                       </td>
-                      <td><span class="badge bg-secondary">{{ res.spot_number }}</span></td>
+                      <td>
+                        <div class="d-flex align-items-center gap-1.5">
+                          <span>{{ getVehicleTypeIcon(res.vehicle_type) }}</span>
+                          <span class="fw-bold font-monospace">{{ res.vehicle_number }}</span>
+                        </div>
+                      </td>
                       <td>
                         <span v-if="res.spot_type === 'handicap'" class="badge bg-info text-dark">♿ Handicap</span>
                         <span v-else class="badge bg-light text-dark border">🚗 Regular</span>
                       </td>
-                      <td class="fw-bold">{{ res.vehicle_number }}</td>
-                      <td>{{ formatTime(res.parking_timestamp) }}</td>
-                      <td>{{ res.leaving_timestamp ? formatTime(res.leaving_timestamp) : 'In Progress' }}</td>
-                      <td class="fw-bold text-success">₹{{ res.parking_cost ? res.parking_cost.toFixed(2) : '0.00' }}</td>
                       <td>
-                        <span class="badge" :class="res.status === 'active' ? 'bg-warning text-dark' : 'bg-success'">
-                          {{ res.status }}
+                        <span class="badge" :class="res.booking_type === 'scheduled' ? 'bg-primary-subtle text-primary border border-primary-subtle' : 'bg-light text-secondary border'">
+                          {{ res.booking_type === 'scheduled' ? '📅 Advance' : '⚡ Park Now' }}
+                        </span>
+                      </td>
+                      <td class="small">{{ formatTime(res.parking_timestamp) }}</td>
+                      <td class="small">{{ res.leaving_timestamp ? formatTime(res.leaving_timestamp) : 'In Progress' }}</td>
+                      <td class="small fw-semibold">
+                        <span v-if="res.status === 'active'" class="text-primary font-monospace">
+                          ⏱️ {{ getElapsed(res.parking_timestamp) }}
+                        </span>
+                        <span v-else class="text-muted">
+                          {{ res.duration_formatted || `${res.duration_hours || 1}h` }}
+                        </span>
+                      </td>
+                      <td>
+                        <div class="fw-bold text-success">₹{{ res.parking_cost ? res.parking_cost.toFixed(2) : '0.00' }}</div>
+                        <div v-if="res.grace_period_applied" class="badge bg-success-subtle text-success small">
+                          ✨ 15m Grace (₹0)
+                        </div>
+                        <div v-if="res.overstay_penalty_cost > 0" class="badge bg-danger-subtle text-danger small">
+                          ⚠️ +₹{{ res.overstay_penalty_cost.toFixed(2) }} Overstay
+                        </div>
+                      </td>
+                      <td>
+                        <span class="badge" :class="res.status === 'active' ? 'bg-warning text-dark' : (res.status === 'scheduled' ? 'bg-info text-dark' : 'bg-success')">
+                          {{ res.status === 'active' ? '🟡 Active' : (res.status === 'scheduled' ? '📅 Scheduled' : '🟢 Completed') }}
                         </span>
                       </td>
                       <td>
                         <button
-                          v-if="res.status === 'active'"
+                          v-if="res.status === 'active' || res.status === 'scheduled'"
                           class="btn btn-danger btn-sm"
                           @click="handleVacateSpot(res.id)"
                         >
                           Vacate
                         </button>
-                        <span v-else class="text-muted small">Completed</span>
+                        <span v-else class="text-muted small">Released</span>
                       </td>
                     </tr>
-                    <tr v-if="reservations.length === 0">
-                      <td colspan="10" class="text-center py-4 text-muted">You have no parking reservations yet.</td>
+                    <tr v-if="filteredReservations.length === 0">
+                      <td colspan="11" class="text-center py-4 text-muted">No reservations found matching your search.</td>
                     </tr>
                   </tbody>
                 </table>
@@ -362,9 +532,79 @@
             <form @submit.prevent="submitBooking">
               <div class="modal-body">
                 <div class="p-3 bg-light rounded mb-3">
-                  <div class="fw-bold text-primary fs-5">{{ selectedLot?.prime_location_name }}</div>
-                  <div class="small text-muted">{{ selectedLot?.address }}</div>
-                  <div class="mt-2 text-success fw-semibold">Rate: ₹{{ selectedLot?.price }}/hour</div>
+                  <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                      <div class="fw-bold text-primary fs-5">{{ selectedLot?.prime_location_name }}</div>
+                      <div class="small text-muted">{{ selectedLot?.address }}</div>
+                    </div>
+                    <span class="badge bg-success fs-6 fw-bold px-3 py-1.5 rounded-pill">
+                      ₹{{ selectedLot?.price }}/hour
+                    </span>
+                  </div>
+                  <!-- Facility Pricing Rules Overview -->
+                  <div class="d-flex flex-wrap gap-1 mt-2 pt-2 border-top">
+                    <span class="badge bg-white text-secondary border">⏱️ {{ selectedLot?.grace_period_minutes !== undefined ? selectedLot?.grace_period_minutes : 15 }}m Free Grace</span>
+                    <span v-if="selectedLot?.daily_rate" class="badge bg-white text-success border">🛡️ ₹{{ selectedLot.daily_rate }}/day Cap</span>
+                    <span v-if="selectedLot?.overnight_rate" class="badge bg-white text-primary border">🌙 ₹{{ selectedLot.overnight_rate }} Overnight</span>
+                    <span v-if="selectedLot?.peak_multiplier > 1" class="badge bg-white text-warning border">⚡ {{ selectedLot.peak_multiplier }}x Peak Surge</span>
+                    <span class="badge bg-white text-danger border">⚠️ ₹{{ selectedLot?.overstay_penalty_rate || 50 }}/h Overstay Penalty</span>
+                  </div>
+                </div>
+
+                <!-- Booking Mode Selector (⚡ Park Now vs 📅 Advance Pre-Booking) -->
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Reservation Mode *</label>
+                  <div class="btn-group w-100" role="group">
+                    <button
+                      type="button"
+                      class="btn py-2 fw-semibold"
+                      :class="bookingForm.booking_type === 'immediate' ? 'btn-primary' : 'btn-outline-primary'"
+                      @click="bookingForm.booking_type = 'immediate'"
+                    >
+                      ⚡ Park Now (Immediate)
+                    </button>
+                    <button
+                      type="button"
+                      class="btn py-2 fw-semibold"
+                      :class="bookingForm.booking_type === 'scheduled' ? 'btn-primary' : 'btn-outline-primary'"
+                      @click="bookingForm.booking_type = 'scheduled'"
+                    >
+                      📅 Advance Pre-Booking
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Advance Pre-Booking Date/Time Windows -->
+                <div v-if="bookingForm.booking_type === 'scheduled'" class="p-3 bg-primary-subtle rounded-3 mb-3 border border-primary-subtle">
+                  <h6 class="fw-bold text-primary mb-2">📅 Schedule Future Parking Interval</h6>
+                  <div class="row g-2">
+                    <div class="col-sm-6">
+                      <label class="form-label small fw-semibold text-dark mb-1">Scheduled Start *</label>
+                      <input
+                        v-model="bookingForm.scheduled_start_time"
+                        type="datetime-local"
+                        class="form-control form-control-sm"
+                        required
+                      />
+                    </div>
+                    <div class="col-sm-6">
+                      <label class="form-label small fw-semibold text-dark mb-1">Scheduled End *</label>
+                      <input
+                        v-model="bookingForm.scheduled_end_time"
+                        type="datetime-local"
+                        class="form-control form-control-sm"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <!-- Dynamic Estimated Cost Widget -->
+                  <div class="mt-2 pt-2 border-top border-primary-subtle d-flex justify-content-between align-items-center small">
+                    <span class="text-secondary">Estimated Duration: <strong>{{ getScheduledDurationHours() }} hrs</strong></span>
+                    <span class="text-success fw-bold fs-6">Estimated Tariff: ₹{{ getEstimatedCost() }}</span>
+                  </div>
+                  <div class="form-text x-small text-muted mt-1">
+                    System verifies overlapping interval collisions and reserves your spot without race conditions.
+                  </div>
                 </div>
 
                 <!-- Spot Type Selection: Regular or Handicap -->
@@ -421,31 +661,68 @@
                   <div class="form-text small">Multi-deck facility: pick a specific deck or let system auto-assign nearest to entrance.</div>
                 </div>
 
-                <!-- Parking Entry / Booking Time Selection -->
+                <!-- Vehicle Selection from Garage or Custom -->
                 <div class="mb-3">
                   <div class="d-flex justify-content-between align-items-center mb-1">
-                    <label class="form-label fw-bold mb-0">Parking Entry / Booking Time *</label>
-                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle small">Selected Time</span>
+                    <label class="form-label fw-bold mb-0">Select Vehicle *</label>
+                    <span v-if="vehicles.length > 0" class="small text-muted">Pick from saved garage</span>
                   </div>
-                  <input
-                    v-model="bookingForm.parking_timestamp"
-                    type="datetime-local"
-                    class="form-control"
-                    required
-                  />
-                  <div class="form-text small">Captured automatically when this booking was selected. You can also adjust if pre-planning.</div>
-                </div>
 
-                <div class="mb-3">
-                  <label class="form-label fw-bold">Vehicle Registration Number *</label>
-                  <input
-                    v-model="bookingForm.vehicle_number"
-                    type="text"
-                    class="form-control"
-                    placeholder="e.g. MH-02-CB-1234"
-                    required
-                  />
-                  <div class="form-text">4-wheeler vehicle license plate number.</div>
+                  <!-- Quick Garage Selector Pills -->
+                  <div v-if="vehicles.length > 0" class="d-flex flex-wrap gap-2 mb-2">
+                    <button 
+                      v-for="v in vehicles" 
+                      :key="'garage-select-' + v.id"
+                      type="button"
+                      class="btn btn-sm rounded-pill text-start py-1 px-3"
+                      :class="bookingForm.vehicle_id === v.id ? 'btn-primary text-white shadow-sm' : 'btn-outline-secondary bg-white'"
+                      @click="selectGarageVehicle(v)"
+                    >
+                      <span>{{ getVehicleTypeIcon(v.vehicle_type) }} <strong>{{ v.license_plate }}</strong></span>
+                      <span v-if="v.nickname" class="small opacity-75 ms-1">({{ v.nickname }})</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      class="btn btn-sm rounded-pill py-1 px-3"
+                      :class="bookingForm.vehicle_id === null ? 'btn-dark text-white' : 'btn-outline-dark bg-white'"
+                      @click="bookingForm.vehicle_id = null"
+                    >
+                      ➕ Custom Plate
+                    </button>
+                  </div>
+
+                  <!-- License Plate Input (editable if custom or auto-filled from garage) -->
+                  <div class="input-group">
+                    <span class="input-group-text bg-light fw-bold font-monospace">
+                      {{ getVehicleTypeIcon(bookingForm.vehicle_type) }}
+                    </span>
+                    <input
+                      v-model="bookingForm.vehicle_number"
+                      type="text"
+                      class="form-control font-monospace fw-bold"
+                      placeholder="e.g. MH-02-CB-1234"
+                      required
+                    />
+                    <select v-model="bookingForm.vehicle_type" class="form-select" style="max-width: 140px;">
+                      <option value="Car">🚗 Car</option>
+                      <option value="SUV">🚙 SUV</option>
+                      <option value="EV">⚡ EV</option>
+                      <option value="Motorcycle">🏍️ Bike</option>
+                    </select>
+                  </div>
+
+                  <!-- Option to save to garage if typing a new custom plate -->
+                  <div v-if="bookingForm.vehicle_id === null" class="form-check mt-2 small">
+                    <input 
+                      v-model="bookingForm.save_to_garage" 
+                      class="form-check-input" 
+                      type="checkbox" 
+                      id="saveToGarageCheck"
+                    />
+                    <label class="form-check-label text-muted" for="saveToGarageCheck">
+                      Save this vehicle to <strong>My Garage</strong> for 1-click booking next time
+                    </label>
+                  </div>
                 </div>
 
                 <div class="mb-3">
@@ -466,6 +743,82 @@
                 <button type="button" class="btn btn-secondary" @click="showBookingModal = false">Cancel</button>
                 <button type="submit" class="btn btn-success" :disabled="bookingSubmitting">
                   {{ bookingSubmitting ? 'Allotting Spot...' : 'Confirm & Book Spot' }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== VEHICLE MODAL (ADD / EDIT) ==================== -->
+      <div v-if="showVehicleModal" class="modal-backdrop fade show"></div>
+      <div v-if="showVehicleModal" class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title fw-bold">
+                {{ vehicleModalMode === 'edit' ? '✏️ Edit Vehicle Profile' : '➕ Add Vehicle to Garage' }}
+              </h5>
+              <button type="button" class="btn-close" @click="showVehicleModal = false"></button>
+            </div>
+            <form @submit.prevent="saveVehicle">
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label fw-bold">License Plate Number *</label>
+                  <input
+                    v-model="vehicleForm.license_plate"
+                    type="text"
+                    class="form-control font-monospace fw-bold"
+                    placeholder="e.g. DL-01-AB-1234"
+                    required
+                  />
+                  <div class="form-text small">Enter registration / number plate.</div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Vehicle Nickname / Alias</label>
+                  <input
+                    v-model="vehicleForm.nickname"
+                    type="text"
+                    class="form-control"
+                    placeholder="e.g. Daily Commuter, Family Car, Red Sedan"
+                  />
+                  <div class="form-text small">Helpful label to identify which car or bike this is.</div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Vehicle Type *</label>
+                  <div class="row g-2">
+                    <div v-for="type in ['Car', 'SUV', 'EV', 'Motorcycle']" :key="type" class="col-6 col-sm-3">
+                      <div 
+                        class="border rounded-3 p-2 text-center cursor-pointer h-100"
+                        :class="vehicleForm.vehicle_type === type ? 'border-primary bg-primary-subtle shadow-sm ring-2' : 'bg-light'"
+                        @click="vehicleForm.vehicle_type = type"
+                      >
+                        <div class="fs-4">{{ getVehicleTypeIcon(type) }}</div>
+                        <div class="small fw-bold mt-1">{{ type }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-check mt-3">
+                  <input 
+                    v-model="vehicleForm.is_default" 
+                    class="form-check-input" 
+                    type="checkbox" 
+                    id="vehicleDefaultCheck"
+                  />
+                  <label class="form-check-label fw-semibold" for="vehicleDefaultCheck">
+                    Set as Default Vehicle (automatically pre-selected when booking)
+                  </label>
+                </div>
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @click="showVehicleModal = false">Cancel</button>
+                <button type="submit" class="btn btn-primary fw-semibold" :disabled="savingVehicle">
+                  {{ savingVehicle ? 'Saving...' : (vehicleModalMode === 'edit' ? 'Update Vehicle' : 'Save to Garage') }}
                 </button>
               </div>
             </form>
@@ -498,21 +851,75 @@ export default {
       reservations: [],
       activeReservations: [],
       activeReservation: null,
+      vehicles: [],
+      vehiclesLoading: false,
+      showVehicleModal: false,
+      vehicleModalMode: 'add',
+      selectedVehicleId: null,
+      vehicleForm: {
+        license_plate: '',
+        nickname: '',
+        vehicle_type: 'Car',
+        is_default: false
+      },
+      savingVehicle: false,
+      resSearchQuery: '',
+      resStatusFilter: 'all',
+      resVenueFilter: 'all',
       nowTimestamp: Date.now(),
       timerInterval: null,
       showBookingModal: false,
       selectedLot: null,
       bookingForm: {
+        booking_type: 'immediate',
+        scheduled_start_time: '',
+        scheduled_end_time: '',
+        vehicle_id: null,
         vehicle_number: '',
+        vehicle_type: 'Car',
+        save_to_garage: false,
+        vehicle_nickname: '',
         remarks: '',
         spot_type: 'regular',
-        floor_id: null
+        floor_id: null,
+        parking_timestamp: ''
       },
       bookingSubmitting: false,
       vacating: false,
       exporting: false,
       exportJob: null,
       monthlyReport: {}
+    }
+  },
+  computed: {
+    filteredReservations() {
+      let list = this.reservations
+      if (this.resStatusFilter !== 'all') {
+        list = list.filter(r => r.status === this.resStatusFilter)
+      }
+      if (this.resVenueFilter !== 'all') {
+        list = list.filter(r => (r.venue_name || r.lot_name) === this.resVenueFilter)
+      }
+      if (this.resSearchQuery && this.resSearchQuery.trim()) {
+        const q = this.resSearchQuery.toLowerCase().trim()
+        list = list.filter(r => 
+          (r.venue_name && r.venue_name.toLowerCase().includes(q)) ||
+          (r.lot_name && r.lot_name.toLowerCase().includes(q)) ||
+          (r.floor_name && r.floor_name.toLowerCase().includes(q)) ||
+          (r.spot_number && r.spot_number.toLowerCase().includes(q)) ||
+          (r.vehicle_number && r.vehicle_number.toLowerCase().includes(q)) ||
+          (r.location_hierarchy && r.location_hierarchy.toLowerCase().includes(q))
+        )
+      }
+      return list
+    },
+    uniqueVenues() {
+      const set = new Set()
+      this.reservations.forEach(r => {
+        const name = r.venue_name || r.lot_name
+        if (name) set.add(name)
+      })
+      return Array.from(set)
     }
   },
   watch: {
@@ -531,6 +938,9 @@ export default {
       if (newTab === 'dashboard') {
         this.fetchLots()
         this.fetchReservations()
+        this.fetchVehicles()
+      } else if (newTab === 'garage') {
+        this.fetchVehicles()
       } else if (newTab === 'reservations') {
         this.fetchReservations()
       } else if (newTab === 'report') {
@@ -542,6 +952,7 @@ export default {
     if (this.isLoggedIn) {
       this.fetchLots()
       this.fetchReservations()
+      this.fetchVehicles()
     }
     this.timerInterval = setInterval(() => {
       this.nowTimestamp = Date.now()
@@ -655,8 +1066,24 @@ export default {
       const now = new Date()
       const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 
+      // Default scheduled start to 1 hour from now, end to 4 hours from now
+      const startSched = new Date(now.getTime() + 60 * 60 * 1000)
+      const endSched = new Date(now.getTime() + 4 * 60 * 60 * 1000)
+      const startSchedIso = new Date(startSched.getTime() - startSched.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+      const endSchedIso = new Date(endSched.getTime() - endSched.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+
+      // Auto-select default vehicle from garage if available
+      const defVehicle = this.vehicles.find(v => v.is_default) || this.vehicles[0] || null
+
       this.bookingForm = {
-        vehicle_number: '',
+        booking_type: 'immediate',
+        scheduled_start_time: startSchedIso,
+        scheduled_end_time: endSchedIso,
+        vehicle_id: defVehicle ? defVehicle.id : null,
+        vehicle_number: defVehicle ? defVehicle.license_plate : '',
+        vehicle_type: defVehicle ? defVehicle.vehicle_type : 'Car',
+        save_to_garage: false,
+        vehicle_nickname: '',
         remarks: '',
         spot_type: defaultType,
         floor_id: null,
@@ -664,33 +1091,170 @@ export default {
       }
       this.showBookingModal = true
     },
+    getScheduledDurationHours() {
+      if (!this.bookingForm.scheduled_start_time || !this.bookingForm.scheduled_end_time) return 0
+      const s = new Date(this.bookingForm.scheduled_start_time).getTime()
+      const e = new Date(this.bookingForm.scheduled_end_time).getTime()
+      if (isNaN(s) || isNaN(e) || e <= s) return 0
+      return Math.round(((e - s) / 3600000) * 10) / 10
+    },
+    getEstimatedCost() {
+      if (!this.selectedLot) return '0.00'
+      const hours = this.getScheduledDurationHours()
+      if (hours <= 0) return '0.00'
+      const lot = this.selectedLot
+      const hourly = lot.price || 0
+      let total = Math.max(hours, 1) * hourly
+      if (lot.daily_rate && lot.daily_rate > 0) {
+        const days = Math.max(1, hours / 24.0)
+        const dailyCap = days * lot.daily_rate
+        if (total > dailyCap) total = dailyCap
+      }
+      return total.toFixed(2)
+    },
+    selectGarageVehicle(v) {
+      this.bookingForm.vehicle_id = v.id
+      this.bookingForm.vehicle_number = v.license_plate
+      this.bookingForm.vehicle_type = v.vehicle_type
+    },
+    getVehicleTypeIcon(type) {
+      if (!type) return '🚗'
+      const t = type.toLowerCase()
+      if (t === 'suv') return '🚙'
+      if (t === 'ev' || t === 'electric') return '⚡'
+      if (t === 'motorcycle' || t === 'bike') return '🏍️'
+      return '🚗'
+    },
+    getVehicleBadgeClass(type) {
+      if (!type) return 'bg-secondary text-white'
+      const t = type.toLowerCase()
+      if (t === 'suv') return 'bg-primary text-white'
+      if (t === 'ev' || t === 'electric') return 'bg-success text-white'
+      if (t === 'motorcycle' || t === 'bike') return 'bg-warning text-dark'
+      return 'bg-info-subtle text-info-emphasis border border-info-subtle'
+    },
+    async fetchVehicles() {
+      if (!this.isLoggedIn) return
+      this.vehiclesLoading = true
+      try {
+        const res = await axios.get('http://localhost:5000/api/vehicles', this.getAuthHeaders())
+        this.vehicles = res.data.vehicles || []
+      } catch (err) {
+        console.error('Failed to fetch vehicles:', err)
+      } finally {
+        this.vehiclesLoading = false
+      }
+    },
+    openAddVehicleModal() {
+      this.vehicleModalMode = 'add'
+      this.selectedVehicleId = null
+      this.vehicleForm = {
+        license_plate: '',
+        nickname: '',
+        vehicle_type: 'Car',
+        is_default: this.vehicles.length === 0
+      }
+      this.showVehicleModal = true
+    },
+    openEditVehicleModal(v) {
+      this.vehicleModalMode = 'edit'
+      this.selectedVehicleId = v.id
+      this.vehicleForm = {
+        license_plate: v.license_plate,
+        nickname: v.nickname,
+        vehicle_type: v.vehicle_type,
+        is_default: v.is_default
+      }
+      this.showVehicleModal = true
+    },
+    async saveVehicle() {
+      if (!this.vehicleForm.license_plate.trim()) return
+      this.savingVehicle = true
+      try {
+        const payload = {
+          license_plate: this.vehicleForm.license_plate.trim().toUpperCase(),
+          nickname: this.vehicleForm.nickname.trim(),
+          vehicle_type: this.vehicleForm.vehicle_type,
+          is_default: this.vehicleForm.is_default
+        }
+        if (this.vehicleModalMode === 'edit') {
+          await axios.put(`http://localhost:5000/api/vehicles/${this.selectedVehicleId}`, payload, this.getAuthHeaders())
+          this.showAlert('Vehicle profile updated successfully!')
+        } else {
+          await axios.post('http://localhost:5000/api/vehicles', payload, this.getAuthHeaders())
+          this.showAlert('Vehicle registered to your garage successfully!')
+        }
+        this.showVehicleModal = false
+        this.fetchVehicles()
+      } catch (err) {
+        this.showAlert(err.response?.data?.error || 'Failed to save vehicle', 'danger')
+      } finally {
+        this.savingVehicle = false
+      }
+    },
+    async deleteVehicle(vehicleId) {
+      if (!confirm('Are you sure you want to remove this vehicle from your garage?')) return
+      try {
+        await axios.delete(`http://localhost:5000/api/vehicles/${vehicleId}`, this.getAuthHeaders())
+        this.showAlert('Vehicle removed from your garage.')
+        this.fetchVehicles()
+      } catch (err) {
+        this.showAlert(err.response?.data?.error || 'Failed to delete vehicle', 'danger')
+      }
+    },
+    async setVehicleDefault(v) {
+      try {
+        await axios.put(`http://localhost:5000/api/vehicles/${v.id}`, { is_default: true }, this.getAuthHeaders())
+        this.showAlert(`${v.license_plate} set as default vehicle.`)
+        this.fetchVehicles()
+      } catch (err) {
+        this.showAlert(err.response?.data?.error || 'Failed to set default vehicle', 'danger')
+      }
+    },
     async submitBooking() {
       if (!this.bookingForm.vehicle_number.trim()) return
       this.bookingSubmitting = true
       try {
-        // Parse the user's selected entry timestamp
-        const selectedDate = this.bookingForm.parking_timestamp 
-          ? new Date(this.bookingForm.parking_timestamp) 
-          : new Date()
-        const isoTimestamp = !isNaN(selectedDate.getTime()) 
-          ? selectedDate.toISOString() 
-          : new Date().toISOString()
+        // In "Park Now" (immediate), entry time is automatically captured as current time
+        const isoTimestamp = this.bookingForm.booking_type === 'immediate'
+          ? new Date().toISOString()
+          : (this.bookingForm.scheduled_start_time ? new Date(this.bookingForm.scheduled_start_time).toISOString() : new Date().toISOString())
 
         const payload = {
           lot_id: this.selectedLot.id,
+          booking_type: this.bookingForm.booking_type,
+          vehicle_id: this.bookingForm.vehicle_id,
           vehicle_number: this.bookingForm.vehicle_number.trim(),
+          vehicle_type: this.bookingForm.vehicle_type || 'Car',
+          save_to_garage: this.bookingForm.save_to_garage,
+          vehicle_nickname: this.bookingForm.vehicle_nickname,
           remarks: this.bookingForm.remarks.trim(),
           spot_type: this.bookingForm.spot_type || 'regular',
           floor_id: this.bookingForm.floor_id,
           parking_timestamp: isoTimestamp
         }
+
+        if (this.bookingForm.booking_type === 'scheduled') {
+          const sDate = new Date(this.bookingForm.scheduled_start_time)
+          const eDate = new Date(this.bookingForm.scheduled_end_time)
+          if (isNaN(sDate.getTime()) || isNaN(eDate.getTime()) || eDate <= sDate) {
+            this.showAlert('Please provide valid scheduled start and end times (end must be after start).', 'danger')
+            this.bookingSubmitting = false
+            return
+          }
+          payload.scheduled_start_time = sDate.toISOString()
+          payload.scheduled_end_time = eDate.toISOString()
+        }
+
         const res = await axios.post('http://localhost:5000/api/reservations', payload, this.getAuthHeaders())
         const typeLabel = res.data.spot_type === 'handicap' ? 'Handicap' : 'Regular'
         const floorText = res.data.floor_name ? ` on ${res.data.floor_name}` : ''
-        this.showAlert(`${typeLabel} spot "${res.data.spot_number}"${floorText} automatically allotted in ${res.data.lot_name}!`)
+        const modeLabel = res.data.booking_type === 'scheduled' ? 'pre-booked for your schedule' : 'allotted via Quick-Book engine'
+        this.showAlert(`${typeLabel} spot "${res.data.spot_number}"${floorText} ${modeLabel} in ${res.data.lot_name}!`)
         this.showBookingModal = false
         this.fetchLots()
         this.fetchReservations()
+        this.fetchVehicles()
       } catch (err) {
         this.showAlert(err.response?.data?.error || 'Booking failed', 'danger')
       } finally {

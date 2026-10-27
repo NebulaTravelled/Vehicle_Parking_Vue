@@ -8,7 +8,7 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from werkzeug.security import generate_password_hash, check_password_hash
 
 import config
-from models import db, User, ParkingLot, ParkingSpot, Reservation, ExportJob, DailyReminderLog, ParkingFloor
+from models import db, User, ParkingLot, ParkingSpot, Reservation, ExportJob, DailyReminderLog, ParkingFloor, Vehicle
 from cache import cache, cached
 from jobs import trigger_csv_export, run_daily_reminders, generate_user_monthly_report
 
@@ -38,6 +38,27 @@ def format_iso(dt):
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.isoformat()
+
+
+def format_duration(seconds):
+    """Format duration in seconds into human-readable string (e.g., '2d 5h 30m', '1h 15m', or '45s')"""
+    if seconds is None or seconds <= 0:
+        return "0s"
+    days = int(seconds // 86400)
+    hours = int((seconds % 86400) // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0:
+        parts.append(f"{minutes}m")
+    if not parts or (days == 0 and hours == 0 and minutes < 3):
+        parts.append(f"{secs}s")
+    return " ".join(parts)
 
 def serialize_floor(floor):
     """Serialize a ParkingFloor with its spots, layout, and availability counts"""
@@ -307,7 +328,7 @@ def login():
 def handle_profile():
     """Get or update current profile (Company, User or Admin)"""
     current_user_id = int(get_jwt_identity())
-    user = User.query.get(current_user_id)
+    user = db.session.get(User, current_user_id)
     
     if not user:
         return jsonify({"error": "User not found"}), 404
@@ -359,7 +380,7 @@ def get_admin_dashboard():
     - High-level platform statistics
     """
     current_user_id = int(get_jwt_identity())
-    admin = User.query.get(current_user_id)
+    admin = db.session.get(User, current_user_id)
     if not admin or admin.role != 'admin':
         return jsonify({"error": "Admin access required"}), 403
     
@@ -589,6 +610,11 @@ def get_admin_dashboard():
             "id": lot.id,
             "prime_location_name": lot.prime_location_name,
             "price": lot.price,
+            "daily_rate": lot.daily_rate or 0.0,
+            "overnight_rate": lot.overnight_rate or 0.0,
+            "peak_multiplier": lot.peak_multiplier or 1.0,
+            "grace_period_minutes": lot.grace_period_minutes if lot.grace_period_minutes is not None else 15,
+            "overstay_penalty_rate": lot.overstay_penalty_rate if lot.overstay_penalty_rate is not None else 50.0,
             "address": lot.address,
             "pin_code": lot.pin_code,
             "number_of_spots": lot.number_of_spots,
@@ -638,7 +664,7 @@ def get_admin_dashboard():
 def get_all_users():
     """Get all registered users (Admin only)"""
     current_user_id = int(get_jwt_identity())
-    admin_user = User.query.get(current_user_id)
+    admin_user = db.session.get(User, current_user_id)
     if not admin_user or admin_user.role != 'admin':
         return jsonify({"error": "Admin access required"}), 403
     
@@ -669,7 +695,7 @@ def get_company_dashboard():
     - Detailed lot information including grid layouts and slot configurations
     """
     current_user_id = int(get_jwt_identity())
-    user = User.query.get(current_user_id)
+    user = db.session.get(User, current_user_id)
     if not user or user.role not in ['company', 'admin']:
         return jsonify({"error": "Company operator or admin access required"}), 403
         
@@ -719,6 +745,11 @@ def get_company_dashboard():
             "prime_location_name": lot.prime_location_name,
             "name": lot.prime_location_name,
             "price": lot.price,
+            "daily_rate": lot.daily_rate or 0.0,
+            "overnight_rate": lot.overnight_rate or 0.0,
+            "peak_multiplier": lot.peak_multiplier or 1.0,
+            "grace_period_minutes": lot.grace_period_minutes if lot.grace_period_minutes is not None else 15,
+            "overstay_penalty_rate": lot.overstay_penalty_rate if lot.overstay_penalty_rate is not None else 50.0,
             "address": lot.address,
             "location": lot.address,
             "pin_code": lot.pin_code,
@@ -794,6 +825,11 @@ def get_parking_lots():
             "prime_location_name": lot.prime_location_name,
             "name": lot.prime_location_name,
             "price": lot.price,
+            "daily_rate": lot.daily_rate or 0.0,
+            "overnight_rate": lot.overnight_rate or 0.0,
+            "peak_multiplier": lot.peak_multiplier or 1.0,
+            "grace_period_minutes": lot.grace_period_minutes if lot.grace_period_minutes is not None else 15,
+            "overstay_penalty_rate": lot.overstay_penalty_rate if lot.overstay_penalty_rate is not None else 50.0,
             "address": lot.address,
             "location": lot.address,
             "pin_code": lot.pin_code,
@@ -820,7 +856,7 @@ def get_parking_lots():
 @app.route('/api/parking-lots/<int:lot_id>', methods=['GET'])
 def get_parking_lot(lot_id):
     """Get parking lot details, grid structure and its parking spots"""
-    lot = ParkingLot.query.get(lot_id)
+    lot = db.session.get(ParkingLot, lot_id)
     if not lot:
         return jsonify({"error": "Parking lot not found"}), 404
     
@@ -842,6 +878,11 @@ def get_parking_lot(lot_id):
         "prime_location_name": lot.prime_location_name,
         "name": lot.prime_location_name,
         "price": lot.price,
+        "daily_rate": lot.daily_rate or 0.0,
+        "overnight_rate": lot.overnight_rate or 0.0,
+        "peak_multiplier": lot.peak_multiplier or 1.0,
+        "grace_period_minutes": lot.grace_period_minutes if lot.grace_period_minutes is not None else 15,
+        "overstay_penalty_rate": lot.overstay_penalty_rate if lot.overstay_penalty_rate is not None else 50.0,
         "address": lot.address,
         "location": lot.address,
         "pin_code": lot.pin_code,
@@ -881,7 +922,7 @@ def create_parking_lot():
     Accepts name, cost/price, address, pin code, grid dimensions, and grid layout.
     """
     current_user_id = int(get_jwt_identity())
-    user = User.query.get(current_user_id)
+    user = db.session.get(User, current_user_id)
     if not user or user.role not in ['admin', 'company']:
         return jsonify({"error": "Admin or Company access required"}), 403
     
@@ -954,6 +995,11 @@ def create_parking_lot():
         company_id=user.id if user.role == 'company' else None,
         prime_location_name=prime_location_name,
         price=price,
+        daily_rate=float(data.get('daily_rate', 0.0) or 0.0),
+        overnight_rate=float(data.get('overnight_rate', 0.0) or 0.0),
+        peak_multiplier=float(data.get('peak_multiplier', 1.0) or 1.0),
+        grace_period_minutes=int(data.get('grace_period_minutes', 15) or 15),
+        overstay_penalty_rate=float(data.get('overstay_penalty_rate', 50.0) or 50.0),
         address=address,
         pin_code=pin_code,
         number_of_spots=total_slots,
@@ -1036,11 +1082,11 @@ def edit_parking_lot(lot_id):
     The number of parking space + handicap space is added and saved as number_of_spots.
     """
     current_user_id = int(get_jwt_identity())
-    user = User.query.get(current_user_id)
+    user = db.session.get(User, current_user_id)
     if not user or user.role not in ['admin', 'company']:
         return jsonify({"error": "Admin or Company access required"}), 403
     
-    lot = ParkingLot.query.get(lot_id)
+    lot = db.session.get(ParkingLot, lot_id)
     if not lot:
         return jsonify({"error": "Parking lot not found"}), 404
         
@@ -1058,9 +1104,19 @@ def edit_parking_lot(lot_id):
     elif 'name' in data and data['name']:
         lot.prime_location_name = data['name'].strip()
         
-    # 2) Edit cost of parking
+    # 2) Edit cost of parking & dynamic pricing rules
     if 'price' in data and data['price'] is not None:
         lot.price = float(data['price'])
+    if 'daily_rate' in data and data['daily_rate'] is not None:
+        lot.daily_rate = float(data['daily_rate'])
+    if 'overnight_rate' in data and data['overnight_rate'] is not None:
+        lot.overnight_rate = float(data['overnight_rate'])
+    if 'peak_multiplier' in data and data['peak_multiplier'] is not None:
+        lot.peak_multiplier = float(data['peak_multiplier'])
+    if 'grace_period_minutes' in data and data['grace_period_minutes'] is not None:
+        lot.grace_period_minutes = int(data['grace_period_minutes'])
+    if 'overstay_penalty_rate' in data and data['overstay_penalty_rate'] is not None:
+        lot.overstay_penalty_rate = float(data['overstay_penalty_rate'])
         
     if 'address' in data and data['address']:
         lot.address = data['address'].strip()
@@ -1072,6 +1128,7 @@ def edit_parking_lot(lot_id):
         
     # 3) Multi-Floor or Single-Floor Grid Updates
     floors_input = data.get('floors')
+    grid_layout_raw = data.get('grid_layout')
     
     if floors_input is not None and isinstance(floors_input, list):
         if len(floors_input) == 0:
@@ -1370,6 +1427,11 @@ def edit_parking_lot(lot_id):
         "id": lot.id,
         "name": lot.prime_location_name,
         "price": lot.price,
+        "daily_rate": lot.daily_rate,
+        "overnight_rate": lot.overnight_rate,
+        "peak_multiplier": lot.peak_multiplier,
+        "grace_period_minutes": lot.grace_period_minutes,
+        "overstay_penalty_rate": lot.overstay_penalty_rate,
         "number_of_spots": lot.number_of_spots,
         "regular_spots": lot.regular_spots,
         "handicap_spots": lot.handicap_spots
@@ -1382,11 +1444,11 @@ def edit_parking_lot(lot_id):
 def delete_parking_lot(lot_id):
     """Delete a parking lot and its spots (Admin or Company owner)"""
     current_user_id = int(get_jwt_identity())
-    user = User.query.get(current_user_id)
+    user = db.session.get(User, current_user_id)
     if not user or user.role not in ['admin', 'company']:
         return jsonify({"error": "Admin or Company access required"}), 403
     
-    lot = ParkingLot.query.get(lot_id)
+    lot = db.session.get(ParkingLot, lot_id)
     if not lot:
         return jsonify({"error": "Parking lot not found"}), 404
         
@@ -1409,6 +1471,132 @@ def delete_parking_lot(lot_id):
     return jsonify({"message": "Parking lot deleted successfully", "id": lot_id}), 200
 
 
+# ==================== VEHICLE GARAGE API (CUSTOMER MULTI-VEHICLE) ====================
+
+@app.route('/api/vehicles', methods=['GET'])
+@jwt_required()
+def get_user_vehicles():
+    """Get all registered vehicles in current customer's garage"""
+    current_user_id = int(get_jwt_identity())
+    vehicles = Vehicle.query.filter_by(user_id=current_user_id).order_by(Vehicle.is_default.desc(), Vehicle.created_at.desc()).all()
+    return jsonify({
+        "total": len(vehicles),
+        "vehicles": [
+            {
+                "id": v.id,
+                "license_plate": v.license_plate,
+                "nickname": v.nickname or v.license_plate,
+                "vehicle_type": v.vehicle_type,
+                "is_default": v.is_default,
+                "created_at": format_iso(v.created_at)
+            }
+            for v in vehicles
+        ]
+    }), 200
+
+
+@app.route('/api/vehicles', methods=['POST'])
+@jwt_required()
+def add_vehicle():
+    """Add a new vehicle to customer's garage"""
+    current_user_id = int(get_jwt_identity())
+    data = request.get_json()
+    if not data or not data.get('license_plate'):
+        return jsonify({"error": "License plate number is required"}), 400
+        
+    plate = data['license_plate'].strip().upper()
+    existing = Vehicle.query.filter_by(user_id=current_user_id, license_plate=plate).first()
+    if existing:
+        return jsonify({"error": f"Vehicle '{plate}' is already in your garage"}), 400
+        
+    v_type = data.get('vehicle_type', 'Car').strip()
+    if v_type not in ['Car', 'SUV', 'Motorcycle', 'EV']:
+        v_type = 'Car'
+        
+    is_default = bool(data.get('is_default', False))
+    if is_default:
+        Vehicle.query.filter_by(user_id=current_user_id).update({"is_default": False})
+        
+    nickname = data.get('nickname', '').strip() or f"{v_type} ({plate})"
+    
+    vehicle = Vehicle(
+        user_id=current_user_id,
+        license_plate=plate,
+        nickname=nickname,
+        vehicle_type=v_type,
+        is_default=is_default
+    )
+    db.session.add(vehicle)
+    db.session.commit()
+    
+    return jsonify({
+        "message": f"Vehicle '{plate}' added to garage successfully",
+        "vehicle": {
+            "id": vehicle.id,
+            "license_plate": vehicle.license_plate,
+            "nickname": vehicle.nickname,
+            "vehicle_type": vehicle.vehicle_type,
+            "is_default": vehicle.is_default,
+            "created_at": format_iso(vehicle.created_at)
+        }
+    }), 201
+
+
+@app.route('/api/vehicles/<int:vehicle_id>', methods=['PUT'])
+@jwt_required()
+def update_vehicle(vehicle_id):
+    """Update vehicle profile in customer garage"""
+    current_user_id = int(get_jwt_identity())
+    vehicle = db.session.get(Vehicle, vehicle_id)
+    if not vehicle or vehicle.user_id != current_user_id:
+        return jsonify({"error": "Vehicle not found"}), 404
+        
+    data = request.get_json() or {}
+    if 'license_plate' in data and data['license_plate']:
+        new_plate = data['license_plate'].strip().upper()
+        conflict = Vehicle.query.filter(Vehicle.user_id == current_user_id, Vehicle.license_plate == new_plate, Vehicle.id != vehicle_id).first()
+        if conflict:
+            return jsonify({"error": f"Another vehicle with plate '{new_plate}' already exists"}), 400
+        vehicle.license_plate = new_plate
+        
+    if 'nickname' in data:
+        vehicle.nickname = data['nickname'].strip()
+    if 'vehicle_type' in data and data['vehicle_type'] in ['Car', 'SUV', 'Motorcycle', 'EV']:
+        vehicle.vehicle_type = data['vehicle_type']
+    if 'is_default' in data:
+        if data['is_default']:
+            Vehicle.query.filter_by(user_id=current_user_id).update({"is_default": False})
+            vehicle.is_default = True
+        else:
+            vehicle.is_default = False
+            
+    db.session.commit()
+    return jsonify({
+        "message": "Vehicle profile updated successfully",
+        "vehicle": {
+            "id": vehicle.id,
+            "license_plate": vehicle.license_plate,
+            "nickname": vehicle.nickname,
+            "vehicle_type": vehicle.vehicle_type,
+            "is_default": vehicle.is_default
+        }
+    }), 200
+
+
+@app.route('/api/vehicles/<int:vehicle_id>', methods=['DELETE'])
+@jwt_required()
+def delete_vehicle(vehicle_id):
+    """Delete a vehicle from customer garage"""
+    current_user_id = int(get_jwt_identity())
+    vehicle = db.session.get(Vehicle, vehicle_id)
+    if not vehicle or vehicle.user_id != current_user_id:
+        return jsonify({"error": "Vehicle not found"}), 404
+        
+    db.session.delete(vehicle)
+    db.session.commit()
+    return jsonify({"message": f"Vehicle '{vehicle.license_plate}' removed from garage"}), 200
+
+
 # ==================== RESERVATION ROUTES ====================
 
 @app.route('/api/reservations', methods=['POST'])
@@ -1419,20 +1607,52 @@ def create_reservation():
     - Strictly enforced role: only Customer ('user') can book
     - Admin and Company accounts are strictly restricted from booking
     - Users can hold multiple active reservations simultaneously
-    - Supports multi-floor selection or auto-allots on lowest floor
+    - Optimized "Book Any" Quick-Book Engine with atomic row-level locking (with_for_update)
+    - Lowest floor / nearest-to-entrance heuristic
+    - Full location hierarchy & vehicle garage association
     """
     current_user_id = int(get_jwt_identity())
-    current_user = User.query.get(current_user_id)
+    current_user = db.session.get(User, current_user_id)
     if not current_user or current_user.role != 'user':
         return jsonify({
             "error": "Only Customer users can book parking slots. Admin and Company accounts are strictly restricted from placing customer reservations."
         }), 403
         
-    data = request.get_json()
-    if not data or not data.get('vehicle_number'):
-        return jsonify({"error": "Vehicle number is required"}), 400
+    data = request.get_json() or {}
+    
+    # 1. Vehicle Garage Association & Plate resolution
+    vehicle_id = data.get('vehicle_id')
+    vehicle = None
+    vehicle_number = None
+    vehicle_type = data.get('vehicle_type', 'Car')
+    
+    if vehicle_id:
+        vehicle = db.session.get(Vehicle, int(vehicle_id))
+        if vehicle and vehicle.user_id == current_user_id:
+            vehicle_number = vehicle.license_plate
+            vehicle_type = vehicle.vehicle_type
+            
+    if not vehicle_number and data.get('vehicle_number'):
+        vehicle_number = data.get('vehicle_number', '').strip().upper()
         
-    vehicle_number = data.get('vehicle_number', '').strip().upper()
+    if not vehicle_number:
+        return jsonify({"error": "Vehicle registration number is required (select from garage or enter plate)"}), 400
+        
+    # Auto-save to garage if requested
+    if data.get('save_to_garage') and vehicle_number:
+        existing_v = Vehicle.query.filter_by(user_id=current_user_id, license_plate=vehicle_number).first()
+        if not existing_v:
+            new_v = Vehicle(
+                user_id=current_user_id,
+                license_plate=vehicle_number,
+                nickname=data.get('vehicle_nickname') or f"{vehicle_type} ({vehicle_number})",
+                vehicle_type=vehicle_type,
+                is_default=False
+            )
+            db.session.add(new_v)
+            db.session.flush()
+            vehicle_id = new_v.id
+
     lot_id = data.get('lot_id') or data.get('parking_lot_id')
     floor_id = data.get('floor_id')
     floor_number = data.get('floor_number')
@@ -1440,44 +1660,117 @@ def create_reservation():
     requested_type = data.get('spot_type', 'regular').strip().lower()
     if requested_type not in ['regular', 'handicap']:
         requested_type = 'regular'
+        
+    booking_type = data.get('booking_type', 'immediate').strip().lower()
+    if booking_type not in ['immediate', 'scheduled']:
+        booking_type = 'immediate'
+        
+    sched_start = None
+    sched_end = None
+    if booking_type == 'scheduled':
+        start_str = data.get('scheduled_start_time') or data.get('start_time')
+        end_str = data.get('scheduled_end_time') or data.get('end_time')
+        if not start_str or not end_str:
+            return jsonify({"error": "Both scheduled start time and scheduled end time are required for advance pre-bookings."}), 400
+        try:
+            sched_start = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+            sched_end = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+            if sched_start.tzinfo is None:
+                sched_start = sched_start.replace(tzinfo=timezone.utc)
+            if sched_end.tzinfo is None:
+                sched_end = sched_end.replace(tzinfo=timezone.utc)
+        except Exception:
+            return jsonify({"error": "Invalid scheduled datetime format."}), 400
+            
+        if sched_end <= sched_start:
+            return jsonify({"error": "Scheduled end time must be after scheduled start time."}), 400
     
     spot = None
+    reservation_status = 'active'
     if lot_id:
-        lot = ParkingLot.query.get(lot_id)
+        lot = db.session.get(ParkingLot, lot_id)
         if not lot:
             return jsonify({"error": "Parking lot not found"}), 404
             
-        # Find first available spot matching requested type and optional floor preference
-        query = ParkingSpot.query.filter_by(lot_id=lot_id, status='A', spot_type=requested_type)
-        if floor_id:
-            query = query.filter_by(floor_id=int(floor_id))
-        elif floor_number is not None:
-            query = query.filter_by(floor_number=int(floor_number))
+        if booking_type == 'scheduled':
+            # Overlapping Interval Collision Detection:
+            # Conflict exists if: existing.start < requested.end AND existing.end > requested.start
+            conflicting_spot_ids = db.session.query(Reservation.spot_id).filter(
+                Reservation.status.in_(['active', 'scheduled']),
+                Reservation.scheduled_start_time.isnot(None),
+                Reservation.scheduled_end_time.isnot(None),
+                Reservation.scheduled_start_time < sched_end,
+                Reservation.scheduled_end_time > sched_start
+            ).scalar_subquery()
             
-        # Lowest floor first heuristic
-        spot = query.order_by(ParkingSpot.floor_number.asc(), ParkingSpot.id.asc()).first()
-        if not spot:
-            type_label = "Handicap (Accessible)" if requested_type == 'handicap' else "Regular"
-            fl_label = " on the requested floor" if (floor_id or floor_number is not None) else ""
-            return jsonify({"error": f"No available {type_label} parking spots{fl_label} in this lot."}), 400
+            query = ParkingSpot.query.filter(
+                ParkingSpot.lot_id == lot_id,
+                ParkingSpot.spot_type == requested_type,
+                ~ParkingSpot.id.in_(conflicting_spot_ids)
+            )
+            if floor_id:
+                query = query.filter_by(floor_id=int(floor_id))
+            elif floor_number is not None:
+                query = query.filter_by(floor_number=int(floor_number))
+                
+            spot = query.order_by(
+                ParkingSpot.floor_number.asc(),
+                (db.func.coalesce(ParkingSpot.row_idx, 0) + db.func.coalesce(ParkingSpot.col_idx, 0)).asc(),
+                ParkingSpot.slot_order.asc(),
+                ParkingSpot.id.asc()
+            ).with_for_update(skip_locked=True).first()
+            
+            if not spot:
+                return jsonify({"error": "No spots available for the requested advance time window. All spots are reserved during this period."}), 400
+                
+            now_utc = datetime.now(timezone.utc)
+            if sched_start <= now_utc <= sched_end:
+                spot.status = 'O'
+                reservation_status = 'active'
+            else:
+                reservation_status = 'scheduled'
+        else:
+            # Immediate Park Now Quick-Book
+            query = ParkingSpot.query.filter_by(lot_id=lot_id, status='A', spot_type=requested_type)
+            if floor_id:
+                query = query.filter_by(floor_id=int(floor_id))
+            elif floor_number is not None:
+                query = query.filter_by(floor_number=int(floor_number))
+                
+            spot = query.order_by(
+                ParkingSpot.floor_number.asc(),
+                (db.func.coalesce(ParkingSpot.row_idx, 0) + db.func.coalesce(ParkingSpot.col_idx, 0)).asc(),
+                ParkingSpot.slot_order.asc(),
+                ParkingSpot.id.asc()
+            ).with_for_update(skip_locked=True).first()
+            
+            if not spot:
+                type_label = "Handicap (Accessible)" if requested_type == 'handicap' else "Regular"
+                fl_label = " on the requested floor" if (floor_id or floor_number is not None) else ""
+                return jsonify({"error": f"No available {type_label} parking spots{fl_label} in this lot."}), 400
+                
+            spot.status = 'O'
+            reservation_status = 'active'
             
     elif data.get('parking_spot_id') or data.get('spot_id'):
         spot_id = data.get('parking_spot_id') or data.get('spot_id')
-        spot = ParkingSpot.query.get(spot_id)
-        if spot and spot.status != 'A':
-            spot = None
+        spot = ParkingSpot.query.filter_by(id=spot_id, status='A').with_for_update(skip_locked=True).first()
         if not spot:
-            return jsonify({"error": "Selected spot is not available"}), 400
+            return jsonify({"error": "Selected spot is no longer available"}), 400
         requested_type = spot.spot_type or 'regular'
+        spot.status = 'O'
+        reservation_status = 'active'
             
     if not spot:
         return jsonify({"error": "No available parking spots found"}), 400
-        
-    # Mark spot as Occupied ('O')
-    spot.status = 'O'
     
+    venue_name = spot.parking_lot.prime_location_name if spot.parking_lot else 'Parking Venue'
+    company_name = spot.parking_lot.company.company_name if (spot.parking_lot and spot.parking_lot.company) else 'Antigravity Parking'
     floor_name = spot.floor_name or (spot.floor.floor_name if spot.floor else 'Ground Floor')
     floor_id_val = spot.floor_id or (spot.floor.id if spot.floor else None)
+    floor_num_val = spot.floor_number if spot.floor_number is not None else 0
+    spot_num_val = spot.spot_number
+    hierarchy_str = f"{venue_name} → {floor_name} → {spot_num_val}"
     
     # Save the time when the booking is selected (client-provided or current UTC time)
     client_ts = data.get('parking_timestamp') or data.get('entry_time') or data.get('start_time')
@@ -1492,22 +1785,31 @@ def create_reservation():
                 else:
                     parking_ts = parsed_dt.replace(tzinfo=timezone.utc)
         except Exception as e:
-            print("Failed to parse client parking_timestamp:", e)
             parking_ts = None
             
     if not parking_ts:
-        parking_ts = datetime.now(timezone.utc)
+        parking_ts = sched_start if (booking_type == 'scheduled' and sched_start) else datetime.now(timezone.utc)
     
-    # Create reservation
+    # Create reservation with complete audit trail & location hierarchy
     reservation = Reservation(
         spot_id=spot.id,
         user_id=current_user_id,
+        venue_name=venue_name,
+        company_name=company_name,
         floor_id=floor_id_val,
+        floor_number=floor_num_val,
         floor_name=floor_name,
-        vehicle_number=vehicle_number,
+        spot_number=spot_num_val,
         spot_type=requested_type,
+        location_hierarchy=hierarchy_str,
+        vehicle_id=vehicle_id,
+        vehicle_number=vehicle_number,
+        vehicle_type=vehicle_type,
+        booking_type=booking_type,
+        scheduled_start_time=sched_start,
+        scheduled_end_time=sched_end,
         parking_timestamp=parking_ts,
-        status='active',
+        status=reservation_status,
         remarks=remarks
     )
     
@@ -1516,8 +1818,9 @@ def create_reservation():
     
     cache.invalidate_prefix("lots_list")
     
+    action_type_label = "Pre-booked for schedule" if booking_type == 'scheduled' else "Booked & Allotted"
     return jsonify({
-        "message": f"{'Handicap' if requested_type == 'handicap' else 'Regular'} parking spot allotted on {floor_name} ({spot.spot_number}) and booked successfully",
+        "message": f"{'Handicap' if requested_type == 'handicap' else 'Regular'} parking spot {action_type_label} on {floor_name} ({spot.spot_number}) successfully",
         "reservation_id": reservation.id,
         "spot_id": spot.id,
         "spot_number": spot.spot_number,
@@ -1525,7 +1828,16 @@ def create_reservation():
         "floor_id": floor_id_val,
         "floor_name": floor_name,
         "floor_number": spot.floor_number,
-        "lot_name": spot.parking_lot.prime_location_name,
+        "lot_name": venue_name,
+        "venue_name": venue_name,
+        "company_name": company_name,
+        "location_hierarchy": hierarchy_str,
+        "vehicle_id": vehicle_id,
+        "vehicle_number": vehicle_number,
+        "vehicle_type": vehicle_type,
+        "booking_type": reservation.booking_type,
+        "scheduled_start_time": format_iso(reservation.scheduled_start_time),
+        "scheduled_end_time": format_iso(reservation.scheduled_end_time),
         "parking_timestamp": format_iso(reservation.parking_timestamp),
         "status": reservation.status
     }), 201
@@ -1542,12 +1854,12 @@ def vacate_reservation(res_id):
     - Returns spot status to 'A' (Available)
     """
     current_user_id = int(get_jwt_identity())
-    reservation = Reservation.query.get(res_id)
+    reservation = db.session.get(Reservation, res_id)
     
     if not reservation:
         return jsonify({"error": "Reservation not found"}), 404
         
-    user = User.query.get(current_user_id)
+    user = db.session.get(User, current_user_id)
     if reservation.user_id != current_user_id and user.role != 'admin':
         return jsonify({"error": "Unauthorized to vacate this reservation"}), 403
         
@@ -1563,9 +1875,62 @@ def vacate_reservation(res_id):
     if start_ts.tzinfo is None:
         start_ts = start_ts.replace(tzinfo=timezone.utc)
     duration_seconds = max((now - start_ts).total_seconds(), 0)
-    duration_hours = max(duration_seconds / 3600.0, 1.0)
-    lot_price = reservation.parking_spot.parking_lot.price if reservation.parking_spot else 0.0
-    reservation.parking_cost = round(duration_hours * lot_price, 2)
+    duration_hours = max(duration_seconds / 3600.0, 0.0)
+    
+    lot = reservation.parking_spot.parking_lot if reservation.parking_spot else None
+    hourly_price = lot.price if lot else 0.0
+    grace_mins = lot.grace_period_minutes if (lot and lot.grace_period_minutes is not None) else 15
+    
+    grace_applied = False
+    parking_cost = 0.0
+    overstay_penalty = 0.0
+    
+    # 1. 15-Minute Free Grace Period Check
+    if duration_seconds <= (grace_mins * 60):
+        grace_applied = True
+        parking_cost = 0.0
+    else:
+        # Minimum 1 hour charge if past grace period
+        billable_hours = max(duration_hours, 1.0)
+        
+        # Check Peak Hours (8:00 AM - 11:00 AM or 5:00 PM - 8:00 PM in local time)
+        local_hour = now.astimezone().hour
+        is_peak = (8 <= local_hour < 11) or (17 <= local_hour < 20)
+        multiplier = (lot.peak_multiplier or 1.0) if (lot and is_peak) else 1.0
+        
+        # Check Overnight Window (10:00 PM - 7:00 AM)
+        is_overnight = (local_hour >= 22 or local_hour < 7)
+        if lot and lot.overnight_rate and lot.overnight_rate > 0 and is_overnight:
+            base_cost = lot.overnight_rate
+        else:
+            base_cost = round(billable_hours * hourly_price * multiplier, 2)
+            
+        # Daily cap (if parked for full day / multiple days)
+        if lot and lot.daily_rate and lot.daily_rate > 0:
+            days = max(1.0, duration_seconds / 86400.0)
+            daily_cap_total = days * lot.daily_rate
+            if base_cost > daily_cap_total:
+                base_cost = round(daily_cap_total, 2)
+                
+        parking_cost = base_cost
+        
+    # 2. Overstay Penalty for Scheduled Pre-bookings
+    if reservation.booking_type == 'scheduled' and reservation.scheduled_end_time:
+        sched_end_utc = reservation.scheduled_end_time
+        if sched_end_utc.tzinfo is None:
+            sched_end_utc = sched_end_utc.replace(tzinfo=timezone.utc)
+        if now > sched_end_utc:
+            overstay_secs = (now - sched_end_utc).total_seconds()
+            overstay_hrs = max(1.0, overstay_secs / 3600.0)
+            penalty_rate = (lot.overstay_penalty_rate or 50.0) if lot else 50.0
+            overstay_penalty = round(overstay_hrs * penalty_rate, 2)
+            parking_cost += overstay_penalty
+            
+    reservation.duration_seconds = int(duration_seconds)
+    reservation.duration_formatted = format_duration(duration_seconds)
+    reservation.parking_cost = round(parking_cost, 2)
+    reservation.grace_period_applied = grace_applied
+    reservation.overstay_penalty_cost = overstay_penalty
     
     # Release spot back to Available ('A')
     if reservation.parking_spot:
@@ -1576,13 +1941,19 @@ def vacate_reservation(res_id):
     # Invalidate cache
     cache.invalidate_prefix("lots_list")
     
+    msg = "Spot vacated within free grace period (₹0 fee charged)!" if grace_applied else "Parking spot vacated and released successfully"
     return jsonify({
-        "message": "Parking spot vacated and released successfully",
+        "message": msg,
         "reservation_id": reservation.id,
         "spot_number": reservation.parking_spot.spot_number if reservation.parking_spot else '',
+        "location_hierarchy": reservation.location_hierarchy or reservation.location_path,
         "parking_timestamp": format_iso(reservation.parking_timestamp),
         "leaving_timestamp": format_iso(reservation.leaving_timestamp),
         "duration_hours": round(duration_hours, 2),
+        "duration_seconds": reservation.duration_seconds,
+        "duration_formatted": reservation.duration_formatted,
+        "grace_period_applied": reservation.grace_period_applied,
+        "overstay_penalty_cost": reservation.overstay_penalty_cost,
         "parking_cost": reservation.parking_cost,
         "status": reservation.status
     }), 200
@@ -1593,7 +1964,7 @@ def vacate_reservation(res_id):
 def get_reservations():
     """Get reservations for current user (or all reservations if admin)"""
     current_user_id = int(get_jwt_identity())
-    user = User.query.get(current_user_id)
+    user = db.session.get(User, current_user_id)
     
     if user.role == 'admin' and request.args.get('all') == 'true':
         reservations = Reservation.query.order_by(Reservation.parking_timestamp.desc()).all()
@@ -1606,24 +1977,42 @@ def get_reservations():
         lot = spot.parking_lot if spot else None
         floor_name = r.floor_name or (spot.floor_name if spot else 'Ground Floor')
         floor_id_val = r.floor_id or (spot.floor_id if spot else None)
-        floor_number_val = spot.floor_number if spot else 0
+        floor_number_val = r.floor_number if r.floor_number is not None else (spot.floor_number if spot else 0)
+        venue_name = r.venue_name or (lot.prime_location_name if lot else 'N/A')
+        company_name = r.company_name or (lot.company.company_name if (lot and lot.company) else 'Antigravity Parking')
+        spot_num = r.spot_number or (spot.spot_number if spot else 'N/A')
+        hierarchy = r.location_hierarchy or f"{venue_name} → {floor_name} → {spot_num}"
+        
         result.append({
             "id": r.id,
             "spot_id": r.spot_id,
             "parking_spot_id": r.spot_id,
-            "spot_number": spot.spot_number if spot else 'N/A',
+            "spot_number": spot_num,
+            "venue_name": venue_name,
+            "company_name": company_name,
+            "location_hierarchy": hierarchy,
+            "location_path": hierarchy,
             "floor_id": floor_id_val,
             "floor_name": floor_name,
             "floor_number": floor_number_val,
             "lot_id": lot.id if lot else None,
-            "lot_name": lot.prime_location_name if lot else 'N/A',
+            "lot_name": venue_name,
             "lot_price": lot.price if lot else 0.0,
+            "vehicle_id": r.vehicle_id,
             "vehicle_number": r.vehicle_number,
+            "vehicle_type": r.vehicle_type or 'Car',
             "spot_type": r.spot_type or (spot.spot_type if spot else 'regular'),
+            "booking_type": r.booking_type or 'immediate',
+            "scheduled_start_time": format_iso(r.scheduled_start_time),
+            "scheduled_end_time": format_iso(r.scheduled_end_time),
             "parking_timestamp": format_iso(r.parking_timestamp),
             "start_time": format_iso(r.parking_timestamp),
             "leaving_timestamp": format_iso(r.leaving_timestamp),
             "end_time": format_iso(r.leaving_timestamp),
+            "duration_seconds": r.duration_seconds,
+            "duration_formatted": r.duration_formatted,
+            "grace_period_applied": r.grace_period_applied or False,
+            "overstay_penalty_cost": r.overstay_penalty_cost or 0.0,
             "parking_cost": r.parking_cost,
             "status": r.status,
             "remarks": r.remarks
@@ -1640,12 +2029,12 @@ def get_reservations():
 def cancel_reservation(res_id):
     """Cancel / Delete a reservation"""
     current_user_id = int(get_jwt_identity())
-    reservation = Reservation.query.get(res_id)
+    reservation = db.session.get(Reservation, res_id)
     
     if not reservation:
         return jsonify({"error": "Reservation not found"}), 404
         
-    user = User.query.get(current_user_id)
+    user = db.session.get(User, current_user_id)
     if reservation.user_id != current_user_id and user.role != 'admin':
         return jsonify({"error": "Unauthorized"}), 403
         
@@ -1683,7 +2072,7 @@ def export_csv_job():
 def get_export_status(job_id):
     """Check status of a user-triggered CSV export job"""
     current_user_id = int(get_jwt_identity())
-    job = ExportJob.query.get(job_id)
+    job = db.session.get(ExportJob, job_id)
     
     if not job or job.user_id != current_user_id:
         return jsonify({"error": "Export job not found"}), 404
@@ -1702,7 +2091,7 @@ def get_export_status(job_id):
 def download_export_csv(job_id):
     """Download generated CSV file"""
     current_user_id = int(get_jwt_identity())
-    job = ExportJob.query.get(job_id)
+    job = db.session.get(ExportJob, job_id)
     
     if not job or job.user_id != current_user_id or job.status != 'completed' or not job.file_path:
         return jsonify({"error": "File not ready or job not found"}), 404
@@ -1751,7 +2140,7 @@ def trigger_daily_reminders():
     Sends alerts to Google Chat Webhook or saves digest logs.
     """
     current_user_id = int(get_jwt_identity())
-    admin = User.query.get(current_user_id)
+    admin = db.session.get(User, current_user_id)
     if not admin or admin.role != 'admin':
         return jsonify({"error": "Admin access required"}), 403
         
@@ -1765,7 +2154,7 @@ def trigger_daily_reminders():
 def get_cache_stats():
     """API performance cache statistics"""
     current_user_id = int(get_jwt_identity())
-    admin = User.query.get(current_user_id)
+    admin = db.session.get(User, current_user_id)
     if not admin or admin.role != 'admin':
         return jsonify({"error": "Admin access required"}), 403
         

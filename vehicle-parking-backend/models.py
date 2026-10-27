@@ -53,6 +53,14 @@ class ParkingLot(db.Model):
     grid_rows = db.Column(db.Integer, default=5, nullable=True)
     grid_cols = db.Column(db.Integer, default=6, nullable=True)
     grid_layout = db.Column(db.Text, nullable=True)  # JSON representation of grid
+    
+    # Pricing Tiers & Operations
+    daily_rate = db.Column(db.Float, default=0.0, nullable=True)          # Daily / 24-hr maximum cap
+    overnight_rate = db.Column(db.Float, default=0.0, nullable=True)      # Flat overnight rate (10 PM - 7 AM)
+    peak_multiplier = db.Column(db.Float, default=1.0, nullable=True)     # Rush hour multiplier (e.g. 1.5x)
+    grace_period_minutes = db.Column(db.Integer, default=15, nullable=True) # Free exit / cancel window
+    overstay_penalty_rate = db.Column(db.Float, default=50.0, nullable=True) # Surcharge per hour past scheduled exit
+    
     created_at = db.Column(db.DateTime, default=utc_now)
     
     # Relationships
@@ -108,6 +116,10 @@ class ParkingSpot(db.Model):
     Attributes: id, lot_id, floor_id, floor_number, floor_name, spot_number, status (O-occupied / A-available), spot_type ('regular'/'handicap')
     """
     __tablename__ = 'parking_spots'
+    __table_args__ = (
+        db.Index('idx_spots_quickbook', 'lot_id', 'status', 'floor_id', 'spot_type'),
+        db.Index('idx_spots_heuristic', 'lot_id', 'status', 'floor_number', 'row_idx', 'col_idx'),
+    )
     
     id = db.Column(db.Integer, primary_key=True)
     lot_id = db.Column(db.Integer, db.ForeignKey('parking_lots.id'), nullable=False)
@@ -118,6 +130,7 @@ class ParkingSpot(db.Model):
     spot_type = db.Column(db.String(20), default='regular', nullable=False)  # 'regular' or 'handicap'
     row_idx = db.Column(db.Integer, nullable=True)
     col_idx = db.Column(db.Integer, nullable=True)
+    slot_order = db.Column(db.Integer, default=0, nullable=True)
     status = db.Column(db.String(5), default='A', nullable=False)  # 'A' = Available, 'O' = Occupied
     created_at = db.Column(db.DateTime, default=utc_now)
     
@@ -133,27 +146,78 @@ class ParkingSpot(db.Model):
         return f'<ParkingSpot {self.lot_id}-{self.spot_number} ({self.floor_name}, {self.spot_type}, {self.status})>'
 
 
+class Vehicle(db.Model):
+    """
+    Vehicle model for Customer Garage (multi-car management).
+    Attributes: id, user_id, license_plate, nickname, vehicle_type ('Car', 'SUV', 'Motorcycle', 'EV'), is_default, created_at
+    """
+    __tablename__ = 'vehicles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    license_plate = db.Column(db.String(30), nullable=False)
+    nickname = db.Column(db.String(80), nullable=True)  # e.g., "Dad's SUV", "Daily Commuter"
+    vehicle_type = db.Column(db.String(30), default='Car', nullable=False)  # 'Car', 'SUV', 'Motorcycle', 'EV'
+    is_default = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    
+    # Relationship
+    user = db.relationship('User', backref=db.backref('vehicles', cascade='all, delete-orphan', lazy=True))
+    
+    def __repr__(self):
+        return f'<Vehicle {self.license_plate} ({self.vehicle_type}, User: {self.user_id})>'
+
+
 class Reservation(db.Model):
     """
     Reserve parking spot model.
     Allocates parking spot as per user requests.
-    Attributes: id, spot_id, user_id, floor_id, floor_name, parking_timestamp, leaving_timestamp, parking_cost, vehicle_number, spot_type
+    Stores comprehensive location hierarchy (Venue -> Floor -> Slot) and duration metrics.
     """
     __tablename__ = 'reservations'
     
     id = db.Column(db.Integer, primary_key=True)
     spot_id = db.Column(db.Integer, db.ForeignKey('parking_spots.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Location Hierarchy & Metadata
+    venue_name = db.Column(db.String(150), nullable=True)
+    company_name = db.Column(db.String(150), nullable=True)
     floor_id = db.Column(db.Integer, nullable=True)
+    floor_number = db.Column(db.Integer, default=0, nullable=True)
     floor_name = db.Column(db.String(80), default='Ground Floor', nullable=True)
+    spot_number = db.Column(db.String(30), nullable=True)
     spot_type = db.Column(db.String(20), default='regular', nullable=True)  # 'regular' or 'handicap'
+    location_hierarchy = db.Column(db.String(255), nullable=True)
+    
+    # Vehicle Association
+    vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=True)
+    vehicle_number = db.Column(db.String(30), nullable=False)
+    vehicle_type = db.Column(db.String(30), default='Car', nullable=True)  # 'Car', 'SUV', 'Motorcycle', 'EV'
+    
+    # Audit Timestamps & Calculated Metrics
+    booking_type = db.Column(db.String(20), default='immediate', nullable=False)  # 'immediate' or 'scheduled'
+    scheduled_start_time = db.Column(db.DateTime, nullable=True)
+    scheduled_end_time = db.Column(db.DateTime, nullable=True)
     parking_timestamp = db.Column(db.DateTime, default=utc_now, nullable=False)
     leaving_timestamp = db.Column(db.DateTime, nullable=True)
+    duration_seconds = db.Column(db.Integer, default=0, nullable=True)
+    duration_formatted = db.Column(db.String(50), nullable=True)
     parking_cost = db.Column(db.Float, default=0.0, nullable=True)
-    vehicle_number = db.Column(db.String(30), nullable=False)
+    grace_period_applied = db.Column(db.Boolean, default=False, nullable=True)
+    overstay_penalty_cost = db.Column(db.Float, default=0.0, nullable=True)
+    
     status = db.Column(db.String(20), default='active', nullable=False)  # 'active', 'completed', 'cancelled'
     remarks = db.Column(db.String(255), default='', nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now)
+    
+    # Relationships
+    vehicle = db.relationship('Vehicle', backref=db.backref('reservations', lazy=True), foreign_keys=[vehicle_id])
+    
+    # Location path helper
+    @property
+    def location_path(self):
+        return self.location_hierarchy or f"{self.venue_name or 'Venue'} → {self.floor_name or 'Ground Floor'} → {self.spot_number or 'Spot'}"
     
     # Backward compatibility properties
     @property

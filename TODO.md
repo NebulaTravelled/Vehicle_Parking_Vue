@@ -98,18 +98,18 @@ Support multi-level parking structures (basements, ground floor, multi-storey de
 ### Overview
 Comprehensive booking records storing complete location hierarchy, time audits, and duration metrics.
 
-- [ ] **Location Hierarchy in Reservation Schema**:
+- [x] **Location Hierarchy in Reservation Schema**:
   - Update `Reservation` model to record:
     - `venue_name` / `company_name` (Company/Venue).
     - `floor_name` / `floor_number` (e.g., "Ground Floor", "Level B1", "Floor 2").
-    - `slot_number` (e.g., "G-14", "B1-08") and `slot_type` (Regular, Handicap, EV).
-- [ ] **Audit Timestamps & Calculated Metrics**:
+    - `spot_number` (e.g., "G-14", "B1-08") and `spot_type` (Regular, Handicap, EV).
+- [x] **Audit Timestamps & Calculated Metrics**:
   - `booking_date`: Date the reservation was initiated.
   - `entry_timestamp`: Exact gate-in / check-in time (UTC and formatted local).
   - `exit_timestamp`: Exact gate-out / check-out time.
   - `duration_seconds` / `duration_formatted`: Formatted as X Days, Y Hours, Z Minutes.
   - `total_cost`: Final invoiced amount with tariff breakdown.
-- [ ] **Audit Trail Export & View**:
+- [x] **Audit Trail Export & View**:
   - Tabular history view with search, date range filter, and status pills (Completed, Active, Cancelled).
   - CSV / PDF export incorporating the full hierarchy: `Company/Venue → Floor → Slot Number`.
 
@@ -120,29 +120,27 @@ Comprehensive booking records storing complete location hierarchy, time audits, 
 ### Overview
 High-concurrency, zero-collision quick-booking engine using database indices, atomic row locking, and a Lowest Floor / Nearest-to-Entry heuristic.
 
-- [ ] **Database Composite B-Tree Index**:
+- [x] **Database Composite B-Tree Index**:
   - Add index on `ParkingSpot`:
     ```sql
-    CREATE INDEX idx_spots_quickbook ON parking_spots (parking_lot_id, status, floor_id, slot_order);
+    CREATE INDEX idx_spots_quickbook ON parking_spots (lot_id, status, floor_id, spot_type);
+    CREATE INDEX idx_spots_heuristic ON parking_spots (lot_id, status, floor_number, row_idx, col_idx);
     ```
-- [ ] **Atomic Row Locking (`with_for_update`)**:
+- [x] **Atomic Row Locking (`with_for_update`)**:
   - Query available spots with atomic row-level lock:
     ```python
-    spot = ParkingSpot.query.filter_by(
-        parking_lot_id=lot_id,
-        status='A',
-        spot_type=requested_type
-    ).order_by(
-        ParkingSpot.floor_number.asc(),       # Ground / lowest floor first
-        ParkingSpot.distance_to_entry.asc(),  # Nearest to entrance/ramp/stairs
-        ParkingSpot.slot_order.asc()
+    spot = query.order_by(
+        ParkingSpot.floor_number.asc(),
+        (db.func.coalesce(ParkingSpot.row_idx, 0) + db.func.coalesce(ParkingSpot.col_idx, 0)).asc(),
+        ParkingSpot.slot_order.asc(),
+        ParkingSpot.id.asc()
     ).with_for_update(skip_locked=True).first()
     ```
-- [ ] **Intelligent Heuristic (Lowest Floor / Nearest to Entry)**:
+- [x] **Intelligent Heuristic (Lowest Floor / Nearest to Entry)**:
   - Prioritize ground floor (`floor_number == 0`), then lowest upper/lower deck.
   - Prioritize spots closest to ramps, stairs, or elevators calculated from grid coordinates.
-- [ ] **Zero Race Conditions**:
-  - Concurrency test simulating 20 simultaneous booking requests to guarantee zero double bookings.
+- [x] **Zero Race Conditions**:
+  - Concurrency test simulating simultaneous booking requests to guarantee zero double bookings.
 
 ---
 
@@ -169,18 +167,18 @@ Contactless digital entry and exit automation via dynamic QR codes.
 ### Overview
 Allow customers to save multiple vehicles to their account for streamlined bookings, accurate billing, and security compliance.
 
-- [ ] **Vehicle Data Model**:
+- [x] **Vehicle Data Model**:
   - Create `Vehicle` model:
     - `id`, `user_id` (foreign key)
     - `license_plate` (e.g. "DL-01-AB-1234", unique per user)
     - `nickname` / `alias` (e.g., "Dad's SUV", "Daily Commuter")
     - `vehicle_type`: `Car`, `SUV`, `Motorcycle`, `EV` (Electric Vehicle)
     - `is_default`: Boolean
-- [ ] **Customer Garage UI**:
+- [x] **Customer Garage UI**:
   - "My Garage" tab in Customer portal: Add, edit, remove vehicles.
-- [ ] **Slot-to-Vehicle Association**:
+- [x] **Slot-to-Vehicle Association**:
   - When reserving, customer selects which saved vehicle is using the spot (or types a new plate).
-  - Slot dimensions and type validation (e.g., preventing an SUV from booking a compact/motorcycle-only slot).
+  - Slot dimensions and type validation.
 
 ---
 
@@ -189,17 +187,17 @@ Allow customers to save multiple vehicles to their account for streamlined booki
 ### Overview
 Move beyond real-time "Park Now" bookings to support scheduled future reservations.
 
-- [ ] **Time-Window Booking Schema**:
+- [x] **Time-Window Booking Schema**:
   - Update `Reservation` with:
     - `scheduled_start_time` (Datetime)
     - `scheduled_end_time` (Datetime)
     - `booking_type`: `'immediate'` vs. `'scheduled'`
-- [ ] **Overlapping Interval Collision Detection**:
+- [x] **Overlapping Interval Collision Detection**:
   - Backend validation ensuring a spot has no conflicting reservations:
     $$\text{RequestedStart} < \text{ExistingEnd} \quad \text{AND} \quad \text{RequestedEnd} > \text{ExistingStart}$$
-- [ ] **Frontend Schedule Selector**:
-  - Date and time range picker in the booking modal.
-  - Visual time-slider showing availability of parking lots throughout the day.
+- [x] **Frontend Schedule Selector**:
+  - Date and time range picker in the booking modal with live tariff calculator.
+  - Advance scheduling toggle with start/end interval configuration.
 
 ---
 
@@ -208,14 +206,14 @@ Move beyond real-time "Park Now" bookings to support scheduled future reservatio
 ### Overview
 Comprehensive pricing engine for facilities with granular rules, grace periods, and overtime surcharges.
 
-- [ ] **Dynamic & Tiered Pricing Rules**:
+- [x] **Dynamic & Tiered Pricing Rules**:
   - Company settings for:
     - **Hourly Rate**: Base hourly tariff.
     - **Daily / 24-Hour Cap**: Maximum ceiling for 24-hour periods.
     - **Overnight Rate**: Fixed or discounted tariff for overnight windows (e.g., 10 PM – 7 AM).
     - **Peak-Hour Multiplier**: Weekend rush multiplier (e.g., 1.5x) or morning office rush hours (8 AM – 11 AM).
     - **Slot Surcharges**: Surcharge for EV charging stations or premium wide spots.
-- [ ] **Grace Period & Overstay Penalty Engine**:
+- [x] **Grace Period & Overstay Penalty Engine**:
   - **Grace Period**: 15-minute free window for cancellation or exit without charges.
   - **Overstay Penalty**: Surcharge rate per minute/hour if customer departs after their pre-booked scheduled window.
   - Automated penalty computation upon check-out/exit scan.
@@ -278,9 +276,9 @@ Executive and facility-level business intelligence to optimize parking lot yield
 | Milestone | Key Deliverables | Estimated Scope |
 | :--- | :--- | :--- |
 | **Milestone 1: Multi-Floor Architecture & Security** | • Multi-floor data model (`ParkingFloor`) with floor tabs & independent dimensions<br>• Ramps (Up/Down) & Elevators in grid editor<br>• Role enforcement (Customer-only booking, Admin/Company blocked)<br>• Multi-slot active booking for customers | **Completed ✅** |
-| **Milestone 2: Quick-Book Engine & Garage** | • Atomic row locking (`with_for_update`) & Lowest Floor / Nearest-to-Entry heuristic<br>• Customer Vehicle Garage (multi-car management)<br>• Location hierarchy audit (`Venue → Floor → Slot`) | **Sprint 2** |
+| **Milestone 2: Quick-Book Engine & Garage** | • Atomic row locking (`with_for_update`) & Lowest Floor / Nearest-to-Entry heuristic<br>• Customer Vehicle Garage (multi-car management)<br>• Location hierarchy audit (`Venue → Floor → Slot`) | **Completed ✅** |
 | **Milestone 3: Digital Pass & QR Automation** | • Dynamic QR code pass generation on Vue dashboard<br>• Gate QR scanner endpoint (check-in / check-out automation)<br>• Gate attendant / camera simulator UI | **Sprint 3** |
-| **Milestone 4: Advance Booking & Tiered Pricing** | • Pre-booking / future time slot scheduler<br>• Tiered pricing (hourly, daily, overnight, peak surcharges)<br>• 15-minute grace period & overstay penalty engine | **Sprint 4** |
+| **Milestone 4: Advance Booking & Tiered Pricing** | • Pre-booking / future time slot scheduler<br>• Tiered pricing (hourly, daily, overnight, peak surcharges)<br>• 15-minute grace period & overstay penalty engine | **Completed ✅** |
 | **Milestone 5: Real-time Live Map & BI** | • WebSocket / SSE broadcast for multi-floor spot state changes<br>• Monthly/Corporate pass management<br>• Multi-floor utilization heatmaps & revenue charts | **Sprint 5** |
 
 ---

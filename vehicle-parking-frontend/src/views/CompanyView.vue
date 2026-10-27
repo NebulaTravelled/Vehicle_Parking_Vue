@@ -149,6 +149,15 @@
                   <strong>🏢 {{ lot.floor_count || (lot.floors ? lot.floors.length : 1) }} Floor{{ (lot.floor_count || 1) > 1 ? 's' : '' }} ({{ lot.number_of_spots }} Total Slots)</strong>
                 </div>
 
+                <!-- Dynamic & Tiered Pricing Policy Badges -->
+                <div class="d-flex flex-wrap gap-1 mb-2">
+                  <span class="badge bg-light text-secondary border">⏱️ {{ lot.grace_period_minutes !== undefined ? lot.grace_period_minutes : 15 }}m Grace</span>
+                  <span v-if="lot.daily_rate" class="badge bg-light text-success border">🛡️ ₹{{ lot.daily_rate }}/day</span>
+                  <span v-if="lot.overnight_rate" class="badge bg-light text-primary border">🌙 ₹{{ lot.overnight_rate }} Night</span>
+                  <span v-if="lot.peak_multiplier > 1" class="badge bg-light text-warning-emphasis border">⚡ {{ lot.peak_multiplier }}x Peak</span>
+                  <span class="badge bg-light text-danger border">⚠️ ₹{{ lot.overstay_penalty_rate || 50 }}/h Overstay</span>
+                </div>
+
                 <!-- Mini Grid Preview Thumbnail with Floor Selector -->
                 <div v-if="getLotPreviewFloor(lot)" class="mini-grid-container mb-3 p-2 bg-light rounded-3 border">
                   <div class="small text-muted mb-1 fw-semibold d-flex justify-content-between align-items-center">
@@ -257,7 +266,7 @@
                   <!-- 2) Edit cost of parking -->
                   <div class="col-md-6">
                     <label class="form-label fw-bold small text-secondary">
-                      2) Cost of Parking (₹ / hr) *
+                      2) Base Cost of Parking (₹ / hr) *
                     </label>
                     <div class="input-group">
                       <span class="input-group-text bg-light text-muted fw-bold">₹</span>
@@ -271,6 +280,89 @@
                         required 
                       />
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Dynamic & Tiered Pricing Rules Configuration -->
+              <div class="card border-0 shadow-sm rounded-3 p-3 mb-3 bg-white">
+                <div class="fw-bold small text-secondary text-uppercase mb-2 d-flex align-items-center gap-1">
+                  <i class="bi bi-tag-fill text-primary"></i> Dynamic & Tiered Pricing Engine
+                </div>
+                <div class="row g-3">
+                  <div class="col-md-4 col-sm-6">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                      🛡️ Daily Rate / 24-hr Cap (₹)
+                    </label>
+                    <input 
+                      v-model.number="editSlotForm.daily_rate" 
+                      type="number" 
+                      step="5" 
+                      min="0" 
+                      class="form-control form-control-sm"
+                      placeholder="e.g. 500 (0 for no cap)"
+                    />
+                    <div class="form-text x-small">Max ceiling per 24 hours</div>
+                  </div>
+
+                  <div class="col-md-4 col-sm-6">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                      🌙 Overnight Flat Tariff (₹)
+                    </label>
+                    <input 
+                      v-model.number="editSlotForm.overnight_rate" 
+                      type="number" 
+                      step="5" 
+                      min="0" 
+                      class="form-control form-control-sm"
+                      placeholder="e.g. 200 (0 for regular hourly)"
+                    />
+                    <div class="form-text x-small">Flat rate for 10 PM - 7 AM</div>
+                  </div>
+
+                  <div class="col-md-4 col-sm-6">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                      ⚡ Peak Hours Multiplier (x)
+                    </label>
+                    <input 
+                      v-model.number="editSlotForm.peak_multiplier" 
+                      type="number" 
+                      step="0.05" 
+                      min="1.0" 
+                      class="form-control form-control-sm"
+                      placeholder="e.g. 1.25"
+                    />
+                    <div class="form-text x-small">Rush hours: 8-11 AM & 5-8 PM</div>
+                  </div>
+
+                  <div class="col-md-6 col-sm-6">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                      ⏱️ Free Grace Period (Minutes)
+                    </label>
+                    <input 
+                      v-model.number="editSlotForm.grace_period_minutes" 
+                      type="number" 
+                      step="1" 
+                      min="0" 
+                      class="form-control form-control-sm"
+                      placeholder="e.g. 15"
+                    />
+                    <div class="form-text x-small">Free exit window with ₹0 fee</div>
+                  </div>
+
+                  <div class="col-md-6 col-sm-6">
+                    <label class="form-label small fw-semibold text-muted mb-1">
+                      ⚠️ Overstay Penalty Rate (₹ / hr)
+                    </label>
+                    <input 
+                      v-model.number="editSlotForm.overstay_penalty_rate" 
+                      type="number" 
+                      step="5" 
+                      min="0" 
+                      class="form-control form-control-sm"
+                      placeholder="e.g. 50"
+                    />
+                    <div class="form-text x-small">Surcharge past scheduled checkout</div>
                   </div>
                 </div>
               </div>
@@ -1038,6 +1130,11 @@ export default {
       this.editSlotForm = {
         prime_location_name: lot.prime_location_name,
         price: lot.price,
+        daily_rate: lot.daily_rate !== undefined ? lot.daily_rate : 0.0,
+        overnight_rate: lot.overnight_rate !== undefined ? lot.overnight_rate : 0.0,
+        peak_multiplier: lot.peak_multiplier !== undefined ? lot.peak_multiplier : 1.0,
+        grace_period_minutes: lot.grace_period_minutes !== undefined ? lot.grace_period_minutes : 15,
+        overstay_penalty_rate: lot.overstay_penalty_rate !== undefined ? lot.overstay_penalty_rate : 50.0,
         floors: []
       }
 
@@ -1185,6 +1282,11 @@ export default {
         const payload = {
           prime_location_name: this.editSlotForm.prime_location_name.trim(),
           price: this.editSlotForm.price,
+          daily_rate: this.editSlotForm.daily_rate,
+          overnight_rate: this.editSlotForm.overnight_rate,
+          peak_multiplier: this.editSlotForm.peak_multiplier,
+          grace_period_minutes: this.editSlotForm.grace_period_minutes,
+          overstay_penalty_rate: this.editSlotForm.overstay_penalty_rate,
           floors: this.editSlotForm.floors.map(f => ({
             id: f.id,
             floor_number: f.floor_number,
