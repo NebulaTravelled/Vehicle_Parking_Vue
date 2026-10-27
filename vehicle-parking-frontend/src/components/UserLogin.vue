@@ -118,6 +118,10 @@ export default {
           username: this.form.username.trim(),
           password: this.form.password
         })
+        if (res.data.user.role !== 'user') {
+          this.error = 'This portal is restricted to Customers. Admin and Company accounts cannot place customer bookings.'
+          return
+        }
         localStorage.setItem('userToken', res.data.access_token)
         localStorage.setItem('userData', JSON.stringify(res.data.user))
         this.$emit('login-success')

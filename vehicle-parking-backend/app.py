@@ -1,14 +1,14 @@
 import json
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify, request, send_file, make_response
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 
 import config
-from models import db, User, ParkingLot, ParkingSpot, Reservation, ExportJob, DailyReminderLog
+from models import db, User, ParkingLot, ParkingSpot, Reservation, ExportJob, DailyReminderLog, ParkingFloor
 from cache import cache, cached
 from jobs import trigger_csv_export, run_daily_reminders, generate_user_monthly_report
 
@@ -29,11 +29,66 @@ CORS(app)
 jwt = JWTManager(app)
 
 
-# ==================== PREDEFINED ACCOUNTS (ADMIN & COMPANY) ====================
+# ==================== PREDEFINED ACCOUNTS & MULTI-FLOOR SCHEMA SYNC ====================
+
+def format_iso(dt):
+    """Serialize a datetime object to standard ISO 8601 string with UTC timezone offset (+00:00)"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+def serialize_floor(floor):
+    """Serialize a ParkingFloor with its spots, layout, and availability counts"""
+    spots = [s for s in floor.spots]
+    grid_data = None
+    if floor.grid_layout:
+        try:
+            grid_data = json.loads(floor.grid_layout)
+        except Exception:
+            grid_data = None
+            
+    available = sum(1 for s in spots if s.status == 'A')
+    occupied = sum(1 for s in spots if s.status == 'O')
+    regular_avail = sum(1 for s in spots if s.status == 'A' and s.spot_type != 'handicap')
+    handicap_avail = sum(1 for s in spots if s.status == 'A' and s.spot_type == 'handicap')
+    
+    return {
+        "id": floor.id,
+        "lot_id": floor.lot_id,
+        "floor_number": floor.floor_number,
+        "floor_name": floor.floor_name,
+        "grid_rows": floor.grid_rows or 5,
+        "grid_cols": floor.grid_cols or 6,
+        "grid_layout": grid_data,
+        "regular_spots": floor.regular_spots or 0,
+        "handicap_spots": floor.handicap_spots or 0,
+        "total_spots": (floor.regular_spots or 0) + (floor.handicap_spots or 0),
+        "available_spots": available,
+        "occupied_spots": occupied,
+        "regular_available": regular_avail,
+        "handicap_available": handicap_avail,
+        "spots": [
+            {
+                "id": s.id,
+                "spot_number": s.spot_number,
+                "status": s.status,
+                "spot_type": s.spot_type or 'regular',
+                "row_idx": s.row_idx,
+                "col_idx": s.col_idx,
+                "floor_id": s.floor_id,
+                "floor_number": s.floor_number,
+                "floor_name": s.floor_name
+            }
+            for s in sorted(spots, key=lambda x: (x.row_idx if x.row_idx is not None else 0, x.col_idx if x.col_idx is not None else 0, x.id))
+        ]
+    }
+
 
 def create_default_admin():
     """
-    Ensure the superuser Admin and a demo Company exist whenever app initializes.
+    Ensure the superuser Admin, demo Company, and multi-floor structures exist whenever app initializes.
     """
     with app.app_context():
         # Superuser Admin
@@ -82,7 +137,6 @@ def create_default_admin():
         for lot in unassigned_lots:
             lot.company_id = company_user.id
             if not lot.grid_layout:
-                # Default 5x6 layout: row 0 & 2 are parking, row 1 & 3 are roads, row 4 is parking & handicap
                 rows, cols = 5, 6
                 lot.grid_rows = rows
                 lot.grid_cols = cols
@@ -108,6 +162,31 @@ def create_default_admin():
                 lot.handicap_spots = h_cnt
                 lot.number_of_spots = p_cnt + h_cnt
         db.session.commit()
+
+        # Synchronize default floors for any lots lacking ParkingFloor records
+        all_lots = ParkingLot.query.all()
+        for lot in all_lots:
+            existing_floors = ParkingFloor.query.filter_by(lot_id=lot.id).all()
+            if not existing_floors:
+                g_floor = ParkingFloor(
+                    lot_id=lot.id,
+                    floor_number=0,
+                    floor_name="Ground Floor",
+                    grid_rows=lot.grid_rows or 5,
+                    grid_cols=lot.grid_cols or 6,
+                    grid_layout=lot.grid_layout,
+                    regular_spots=lot.regular_spots or 0,
+                    handicap_spots=lot.handicap_spots or 0
+                )
+                db.session.add(g_floor)
+                db.session.flush()
+                # Link existing spots to this floor
+                lot_spots = ParkingSpot.query.filter_by(lot_id=lot.id).all()
+                for s in lot_spots:
+                    s.floor_id = g_floor.id
+                    s.floor_number = 0
+                    s.floor_name = "Ground Floor"
+                db.session.commit()
 
 
 # ==================== AUTH ROUTES ====================
@@ -200,7 +279,7 @@ def login():
         return jsonify({"error": "Invalid credentials"}), 401
     
     # Update last_visited_at
-    user.last_visited_at = datetime.utcnow()
+    user.last_visited_at = datetime.now(timezone.utc)
     db.session.commit()
     
     access_token = create_access_token(identity=str(user.id))
@@ -265,7 +344,7 @@ def handle_profile():
         "mobile_number": user.mobile_number or '',
         "description": user.description or '',
         "address": user.address or '',
-        "created_at": user.created_at.isoformat() if user.created_at else None
+        "created_at": format_iso(user.created_at)
     }), 200
 
 
@@ -394,6 +473,118 @@ def get_admin_dashboard():
                 })
             enriched_grid.append(enriched_row)
             
+        # Build enriched floors for multi-floor visualization
+        enriched_floors = []
+        for fl in sorted(lot.floors, key=lambda x: x.floor_number):
+            fl_spots = [s for s in fl.spots]
+            fl_spot_by_coord = {}
+            for s in fl_spots:
+                if s.row_idx is not None and s.col_idx is not None:
+                    fl_spot_by_coord[(s.row_idx, s.col_idx)] = s
+                    
+            fl_grid_data = None
+            if fl.grid_layout:
+                try:
+                    fl_grid_data = json.loads(fl.grid_layout)
+                except Exception:
+                    fl_grid_data = None
+            if not fl_grid_data or not isinstance(fl_grid_data, list):
+                fl_grid_data = []
+                
+            fl_roads = 0
+            fl_stairs = 0
+            fl_ramps_up = 0
+            fl_ramps_down = 0
+            fl_elevators = 0
+            fl_empty = 0
+            fl_enriched_grid = []
+            
+            fl_reg_iter = iter([s for s in fl_spots if s.spot_type != 'handicap'])
+            fl_handi_iter = iter([s for s in fl_spots if s.spot_type == 'handicap'])
+            fl_all_iter = iter(fl_spots)
+            
+            for r_idx, row in enumerate(fl_grid_data):
+                enriched_row = []
+                for c_idx, cell in enumerate(row):
+                    ctype = cell.get('type') if isinstance(cell, dict) else str(cell)
+                    spot_obj = None
+                    if (r_idx, c_idx) in fl_spot_by_coord:
+                        sp = fl_spot_by_coord[(r_idx, c_idx)]
+                        spot_obj = {
+                            "id": sp.id,
+                            "spot_number": sp.spot_number,
+                            "status": sp.status,
+                            "spot_type": sp.spot_type
+                        }
+                    elif ctype == 'parking':
+                        sp = next(fl_reg_iter, None) or next(fl_all_iter, None)
+                        if sp:
+                            spot_obj = {
+                                "id": sp.id,
+                                "spot_number": sp.spot_number,
+                                "status": sp.status,
+                                "spot_type": sp.spot_type or 'regular'
+                            }
+                    elif ctype == 'handicap':
+                        sp = next(fl_handi_iter, None) or next(fl_all_iter, None)
+                        if sp:
+                            spot_obj = {
+                                "id": sp.id,
+                                "spot_number": sp.spot_number,
+                                "status": sp.status,
+                                "spot_type": 'handicap'
+                            }
+                    elif ctype == 'road':
+                        fl_roads += 1
+                    elif ctype == 'stairs':
+                        fl_stairs += 1
+                    elif ctype == 'ramp_up':
+                        fl_ramps_up += 1
+                    elif ctype == 'ramp_down':
+                        fl_ramps_down += 1
+                    elif ctype == 'elevator':
+                        fl_elevators += 1
+                    elif ctype == 'empty':
+                        fl_empty += 1
+                        
+                    enriched_row.append({
+                        "type": ctype,
+                        "row": r_idx,
+                        "col": c_idx,
+                        "spot": spot_obj
+                    })
+                fl_enriched_grid.append(enriched_row)
+                
+            enriched_floors.append({
+                "id": fl.id,
+                "floor_number": fl.floor_number,
+                "floor_name": fl.floor_name,
+                "grid_rows": fl.grid_rows or 5,
+                "grid_cols": fl.grid_cols or 6,
+                "grid_layout": fl_enriched_grid,
+                "regular_spots": sum(1 for s in fl_spots if s.spot_type != 'handicap'),
+                "handicap_spots": sum(1 for s in fl_spots if s.spot_type == 'handicap'),
+                "available_count": sum(1 for s in fl_spots if s.status == 'A'),
+                "occupied_count": sum(1 for s in fl_spots if s.status == 'O'),
+                "roads_count": fl_roads,
+                "stairs_count": fl_stairs,
+                "ramp_up_count": fl_ramps_up,
+                "ramp_down_count": fl_ramps_down,
+                "elevator_count": fl_elevators,
+                "empty_count": fl_empty,
+                "spots": [
+                    {
+                        "id": s.id,
+                        "spot_number": s.spot_number,
+                        "status": s.status,
+                        "spot_type": s.spot_type or 'regular',
+                        "row_idx": s.row_idx,
+                        "col_idx": s.col_idx
+                    }
+                    for s in fl_spots
+                ]
+            })
+
         lots_detail.append({
             "id": lot.id,
             "prime_location_name": lot.prime_location_name,
@@ -413,6 +604,8 @@ def get_admin_dashboard():
             "grid_rows": rows,
             "grid_cols": cols,
             "grid_layout": enriched_grid,
+            "floors": enriched_floors,
+            "floor_count": len(enriched_floors),
             "spots": [
                 {
                     "id": s.id,
@@ -458,7 +651,7 @@ def get_all_users():
                 "username": u.username,
                 "email": u.email,
                 "role": u.role,
-                "created_at": u.created_at.isoformat() if u.created_at else None
+                "created_at": format_iso(u.created_at)
             }
             for u in users
         ]
@@ -540,6 +733,8 @@ def get_company_dashboard():
             "grid_rows": lot.grid_rows or 5,
             "grid_cols": lot.grid_cols or 6,
             "grid_layout": grid_data,
+            "floors": [serialize_floor(f) for f in sorted(lot.floors, key=lambda f: f.floor_number)],
+            "floor_count": len(lot.floors),
             "spots": [
                 {
                     "id": s.id,
@@ -611,7 +806,9 @@ def get_parking_lots():
             "regular_available_spots": regular_avail,
             "handicap_available_spots": handicap_avail,
             "grid_rows": lot.grid_rows or 5,
-            "grid_cols": lot.grid_cols or 6
+            "grid_cols": lot.grid_cols or 6,
+            "floors": [serialize_floor(f) for f in sorted(lot.floors, key=lambda f: f.floor_number)],
+            "floor_count": len(lot.floors)
         })
     
     return jsonify({
@@ -659,6 +856,8 @@ def get_parking_lot(lot_id):
         "grid_rows": lot.grid_rows or 5,
         "grid_cols": lot.grid_cols or 6,
         "grid_layout": grid_data,
+        "floors": [serialize_floor(f) for f in sorted(lot.floors, key=lambda f: f.floor_number)],
+        "floor_count": len(lot.floors),
         "spots": [
             {
                 "id": s.id,
@@ -766,12 +965,29 @@ def create_parking_lot():
     )
     db.session.add(lot)
     db.session.flush()
+
+    # Create default Ground Floor for multi-floor facility support
+    g_floor = ParkingFloor(
+        lot_id=lot.id,
+        floor_number=0,
+        floor_name="Ground Floor",
+        grid_rows=grid_rows,
+        grid_cols=grid_cols,
+        grid_layout=json.dumps(parsed_layout) if parsed_layout else None,
+        regular_spots=len(parking_cells),
+        handicap_spots=len(handicap_cells)
+    )
+    db.session.add(g_floor)
+    db.session.flush()
     
-    # Create spots
+    # Create spots linked to Ground Floor
     for i, (r, c) in enumerate(parking_cells, start=1):
         spot = ParkingSpot(
             lot_id=lot.id,
-            spot_number=f"P-{i}",
+            floor_id=g_floor.id,
+            floor_number=0,
+            floor_name="Ground Floor",
+            spot_number=f"G-P{i}",
             spot_type='regular',
             row_idx=r,
             col_idx=c,
@@ -782,7 +998,10 @@ def create_parking_lot():
     for j, (r, c) in enumerate(handicap_cells, start=1):
         spot = ParkingSpot(
             lot_id=lot.id,
-            spot_number=f"H-{j}",
+            floor_id=g_floor.id,
+            floor_number=0,
+            floor_name="Ground Floor",
+            spot_number=f"G-H{j}",
             spot_type='handicap',
             row_idx=r,
             col_idx=c,
@@ -794,11 +1013,12 @@ def create_parking_lot():
     cache.invalidate_prefix("lots_list")
     
     return jsonify({
-        "message": "Parking space created successfully",
+        "message": "Parking space created successfully with Ground Floor",
         "id": lot.id,
         "number_of_spots": total_slots,
         "regular_spots": len(parking_cells),
-        "handicap_spots": len(handicap_cells)
+        "handicap_spots": len(handicap_cells),
+        "floors": [serialize_floor(g_floor)]
     }), 201
 
 
@@ -850,17 +1070,181 @@ def edit_parking_lot(lot_id):
     if 'pin_code' in data and data['pin_code']:
         lot.pin_code = str(data['pin_code']).strip()
         
-    # 3) Edit grid size & 4) Edit grid space
-    grid_layout_raw = data.get('grid_layout')
-    grid_rows = data.get('grid_rows')
-    grid_cols = data.get('grid_cols')
+    # 3) Multi-Floor or Single-Floor Grid Updates
+    floors_input = data.get('floors')
     
-    if grid_rows is not None:
-        lot.grid_rows = int(grid_rows)
-    if grid_cols is not None:
-        lot.grid_cols = int(grid_cols)
+    if floors_input is not None and isinstance(floors_input, list):
+        if len(floors_input) == 0:
+            return jsonify({"error": "A parking facility must contain at least one floor."}), 400
+            
+        existing_floors = {f.id: f for f in lot.floors}
+        seen_floor_ids = set()
         
-    if grid_layout_raw is not None:
+        all_floor_parsed = []
+        for fl_data in floors_input:
+            f_num = int(fl_data.get('floor_number', 0))
+            f_name = str(fl_data.get('floor_name') or ("Ground Floor" if f_num == 0 else f"Floor {f_num}")).strip()
+            f_rows = int(fl_data.get('grid_rows', 5))
+            f_cols = int(fl_data.get('grid_cols', 6))
+            raw_layout = fl_data.get('grid_layout')
+            
+            p_layout = None
+            if isinstance(raw_layout, str):
+                try:
+                    p_layout = json.loads(raw_layout)
+                except Exception:
+                    p_layout = []
+            elif isinstance(raw_layout, list):
+                p_layout = raw_layout
+            else:
+                p_layout = []
+                
+            p_cells = []
+            h_cells = []
+            for r_idx, row in enumerate(p_layout):
+                for c_idx, cell in enumerate(row):
+                    ctype = cell.get('type') if isinstance(cell, dict) else str(cell)
+                    if ctype == 'parking':
+                        p_cells.append((r_idx, c_idx))
+                    elif ctype == 'handicap':
+                        h_cells.append((r_idx, c_idx))
+                        
+            all_floor_parsed.append({
+                "id": fl_data.get('id'),
+                "floor_number": f_num,
+                "floor_name": f_name,
+                "grid_rows": f_rows,
+                "grid_cols": f_cols,
+                "grid_layout": p_layout,
+                "parking_cells": p_cells,
+                "handicap_cells": h_cells
+            })
+            
+        grand_total = sum(len(f["parking_cells"]) + len(f["handicap_cells"]) for f in all_floor_parsed)
+        if grand_total <= 0:
+            return jsonify({"error": "Facility must include at least 1 bookable Parking or Handicap space across its floors."}), 400
+            
+        # Process each floor
+        for fl in all_floor_parsed:
+            floor_obj = None
+            if fl["id"] and int(fl["id"]) in existing_floors:
+                floor_obj = existing_floors[int(fl["id"])]
+            else:
+                for ef in lot.floors:
+                    if ef.floor_number == fl["floor_number"]:
+                        floor_obj = ef
+                        break
+                if not floor_obj:
+                    floor_obj = ParkingFloor(
+                        lot_id=lot.id,
+                        floor_number=fl["floor_number"],
+                        floor_name=fl["floor_name"],
+                        grid_rows=fl["grid_rows"],
+                        grid_cols=fl["grid_cols"]
+                    )
+                    db.session.add(floor_obj)
+                    db.session.flush()
+                    
+            floor_obj.floor_number = fl["floor_number"]
+            floor_obj.floor_name = fl["floor_name"]
+            floor_obj.grid_rows = fl["grid_rows"]
+            floor_obj.grid_cols = fl["grid_cols"]
+            floor_obj.grid_layout = json.dumps(fl["grid_layout"])
+            floor_obj.regular_spots = len(fl["parking_cells"])
+            floor_obj.handicap_spots = len(fl["handicap_cells"])
+            seen_floor_ids.add(floor_obj.id)
+            
+            # Floor prefix for spots: e.g. G-P1, L1-P1, B1-P1
+            if floor_obj.floor_number == 0:
+                p_pfx, h_pfx = "G-P", "G-H"
+            elif floor_obj.floor_number < 0:
+                p_pfx, h_pfx = f"B{abs(floor_obj.floor_number)}-P", f"B{abs(floor_obj.floor_number)}-H"
+            else:
+                p_pfx, h_pfx = f"L{floor_obj.floor_number}-P", f"L{floor_obj.floor_number}-H"
+                
+            desired_spots = []
+            for idx, (r, c) in enumerate(fl["parking_cells"], start=1):
+                desired_spots.append({
+                    "spot_number": f"{p_pfx}{idx}",
+                    "spot_type": "regular",
+                    "row_idx": r,
+                    "col_idx": c
+                })
+            for idx, (r, c) in enumerate(fl["handicap_cells"], start=1):
+                desired_spots.append({
+                    "spot_number": f"{h_pfx}{idx}",
+                    "spot_type": "handicap",
+                    "row_idx": r,
+                    "col_idx": c
+                })
+                
+            curr_floor_spots = ParkingSpot.query.filter_by(lot_id=lot.id, floor_id=floor_obj.id).all()
+            if not curr_floor_spots and floor_obj.floor_number == 0:
+                curr_floor_spots = ParkingSpot.query.filter_by(lot_id=lot.id, floor_id=None).all()
+                for s in curr_floor_spots:
+                    s.floor_id = floor_obj.id
+                    
+            for idx, des in enumerate(desired_spots):
+                if idx < len(curr_floor_spots):
+                    sp = curr_floor_spots[idx]
+                    sp.spot_number = des["spot_number"]
+                    sp.spot_type = des["spot_type"]
+                    sp.row_idx = des["row_idx"]
+                    sp.col_idx = des["col_idx"]
+                    sp.floor_id = floor_obj.id
+                    sp.floor_number = floor_obj.floor_number
+                    sp.floor_name = floor_obj.floor_name
+                else:
+                    new_sp = ParkingSpot(
+                        lot_id=lot.id,
+                        floor_id=floor_obj.id,
+                        floor_number=floor_obj.floor_number,
+                        floor_name=floor_obj.floor_name,
+                        spot_number=des["spot_number"],
+                        spot_type=des["spot_type"],
+                        row_idx=des["row_idx"],
+                        col_idx=des["col_idx"],
+                        status='A'
+                    )
+                    db.session.add(new_sp)
+                    
+            if len(curr_floor_spots) > len(desired_spots):
+                surplus = curr_floor_spots[len(desired_spots):]
+                for sp in surplus:
+                    if sp.status == 'A':
+                        db.session.delete(sp)
+                        
+        # Handle removed floors
+        for fid, f_obj in existing_floors.items():
+            if fid not in seen_floor_ids:
+                f_spots = ParkingSpot.query.filter_by(floor_id=fid).all()
+                occ = [s for s in f_spots if s.status == 'O']
+                if occ:
+                    return jsonify({"error": f"Cannot remove floor '{f_obj.floor_name}' because it contains active occupied spots."}), 400
+                db.session.delete(f_obj)
+                
+        db.session.flush()
+        current_floors = ParkingFloor.query.filter_by(lot_id=lot.id).all()
+        total_p = sum(f.regular_spots or 0 for f in current_floors)
+        total_h = sum(f.handicap_spots or 0 for f in current_floors)
+        lot.number_of_spots = total_p + total_h
+        lot.regular_spots = total_p
+        lot.handicap_spots = total_h
+        
+        g_floor = next((f for f in current_floors if f.floor_number == 0), (current_floors[0] if current_floors else None))
+        if g_floor:
+            lot.grid_rows = g_floor.grid_rows
+            lot.grid_cols = g_floor.grid_cols
+            lot.grid_layout = g_floor.grid_layout
+            
+    elif grid_layout_raw is not None:
+        grid_rows = data.get('grid_rows')
+        grid_cols = data.get('grid_cols')
+        if grid_rows is not None:
+            lot.grid_rows = int(grid_rows)
+        if grid_cols is not None:
+            lot.grid_cols = int(grid_cols)
+
         parsed_layout = None
         if isinstance(grid_layout_raw, str):
             try:
@@ -899,24 +1283,35 @@ def edit_parking_lot(lot_id):
         lot.regular_spots = len(parking_cells)
         lot.handicap_spots = len(handicap_cells)
         
+        # Ensure default Ground Floor exists and update it
+        g_floor = next((f for f in lot.floors if f.floor_number == 0), None)
+        if not g_floor:
+            g_floor = ParkingFloor(lot_id=lot.id, floor_number=0, floor_name="Ground Floor")
+            db.session.add(g_floor)
+            db.session.flush()
+        g_floor.grid_rows = lot.grid_rows
+        g_floor.grid_cols = lot.grid_cols
+        g_floor.grid_layout = lot.grid_layout
+        g_floor.regular_spots = len(parking_cells)
+        g_floor.handicap_spots = len(handicap_cells)
+        
         # Build desired spot configurations
         desired = []
         for idx, (r, c) in enumerate(parking_cells, start=1):
             desired.append({
-                "spot_number": f"P-{idx}",
+                "spot_number": f"G-P{idx}",
                 "spot_type": "regular",
                 "row_idx": r,
                 "col_idx": c
             })
         for idx, (r, c) in enumerate(handicap_cells, start=1):
             desired.append({
-                "spot_number": f"H-{idx}",
+                "spot_number": f"G-H{idx}",
                 "spot_type": "handicap",
                 "row_idx": r,
                 "col_idx": c
             })
             
-        # Update existing spots safely to preserve foreign keys
         for idx, des in enumerate(desired):
             if idx < len(current_spots):
                 sp = current_spots[idx]
@@ -924,9 +1319,15 @@ def edit_parking_lot(lot_id):
                 sp.spot_type = des["spot_type"]
                 sp.row_idx = des["row_idx"]
                 sp.col_idx = des["col_idx"]
+                sp.floor_id = g_floor.id
+                sp.floor_number = 0
+                sp.floor_name = "Ground Floor"
             else:
                 new_sp = ParkingSpot(
                     lot_id=lot.id,
+                    floor_id=g_floor.id,
+                    floor_number=0,
+                    floor_name="Ground Floor",
                     spot_number=des["spot_number"],
                     spot_type=des["spot_type"],
                     row_idx=des["row_idx"],
@@ -935,7 +1336,6 @@ def edit_parking_lot(lot_id):
                 )
                 db.session.add(new_sp)
                 
-        # If surplus available spots exist, remove them
         if len(current_spots) > len(desired):
             surplus = current_spots[len(desired):]
             for sp in surplus:
@@ -1016,20 +1416,26 @@ def delete_parking_lot(lot_id):
 def create_reservation():
     """
     User books a parking spot:
-    - User selects a parking lot
-    - Users can book regular or handicap parking
-    - Spot is automatically allotted based on spot_type (regular / handicap)
-    - Spot status updated to 'O' (Occupied)
-    - Reservation recorded with parking_timestamp and spot_type
+    - Strictly enforced role: only Customer ('user') can book
+    - Admin and Company accounts are strictly restricted from booking
+    - Users can hold multiple active reservations simultaneously
+    - Supports multi-floor selection or auto-allots on lowest floor
     """
     current_user_id = int(get_jwt_identity())
+    current_user = User.query.get(current_user_id)
+    if not current_user or current_user.role != 'user':
+        return jsonify({
+            "error": "Only Customer users can book parking slots. Admin and Company accounts are strictly restricted from placing customer reservations."
+        }), 403
+        
     data = request.get_json()
-    
     if not data or not data.get('vehicle_number'):
         return jsonify({"error": "Vehicle number is required"}), 400
         
     vehicle_number = data.get('vehicle_number', '').strip().upper()
     lot_id = data.get('lot_id') or data.get('parking_lot_id')
+    floor_id = data.get('floor_id')
+    floor_number = data.get('floor_number')
     remarks = data.get('remarks', '').strip()
     requested_type = data.get('spot_type', 'regular').strip().lower()
     if requested_type not in ['regular', 'handicap']:
@@ -1041,11 +1447,19 @@ def create_reservation():
         if not lot:
             return jsonify({"error": "Parking lot not found"}), 404
             
-        # Find first available spot matching the requested spot type
-        spot = ParkingSpot.query.filter_by(lot_id=lot_id, status='A', spot_type=requested_type).first()
+        # Find first available spot matching requested type and optional floor preference
+        query = ParkingSpot.query.filter_by(lot_id=lot_id, status='A', spot_type=requested_type)
+        if floor_id:
+            query = query.filter_by(floor_id=int(floor_id))
+        elif floor_number is not None:
+            query = query.filter_by(floor_number=int(floor_number))
+            
+        # Lowest floor first heuristic
+        spot = query.order_by(ParkingSpot.floor_number.asc(), ParkingSpot.id.asc()).first()
         if not spot:
             type_label = "Handicap (Accessible)" if requested_type == 'handicap' else "Regular"
-            return jsonify({"error": f"No available {type_label} parking spots in this lot."}), 400
+            fl_label = " on the requested floor" if (floor_id or floor_number is not None) else ""
+            return jsonify({"error": f"No available {type_label} parking spots{fl_label} in this lot."}), 400
             
     elif data.get('parking_spot_id') or data.get('spot_id'):
         spot_id = data.get('parking_spot_id') or data.get('spot_id')
@@ -1057,18 +1471,42 @@ def create_reservation():
         requested_type = spot.spot_type or 'regular'
             
     if not spot:
-        return jsonify({"error": "No available parking spots in this lot"}), 400
+        return jsonify({"error": "No available parking spots found"}), 400
         
     # Mark spot as Occupied ('O')
     spot.status = 'O'
+    
+    floor_name = spot.floor_name or (spot.floor.floor_name if spot.floor else 'Ground Floor')
+    floor_id_val = spot.floor_id or (spot.floor.id if spot.floor else None)
+    
+    # Save the time when the booking is selected (client-provided or current UTC time)
+    client_ts = data.get('parking_timestamp') or data.get('entry_time') or data.get('start_time')
+    parking_ts = None
+    if client_ts:
+        try:
+            if isinstance(client_ts, str):
+                cleaned_ts = client_ts.replace('Z', '+00:00')
+                parsed_dt = datetime.fromisoformat(cleaned_ts)
+                if parsed_dt.tzinfo is not None:
+                    parking_ts = parsed_dt.astimezone(timezone.utc)
+                else:
+                    parking_ts = parsed_dt.replace(tzinfo=timezone.utc)
+        except Exception as e:
+            print("Failed to parse client parking_timestamp:", e)
+            parking_ts = None
+            
+    if not parking_ts:
+        parking_ts = datetime.now(timezone.utc)
     
     # Create reservation
     reservation = Reservation(
         spot_id=spot.id,
         user_id=current_user_id,
+        floor_id=floor_id_val,
+        floor_name=floor_name,
         vehicle_number=vehicle_number,
         spot_type=requested_type,
-        parking_timestamp=datetime.utcnow(),
+        parking_timestamp=parking_ts,
         status='active',
         remarks=remarks
     )
@@ -1079,13 +1517,16 @@ def create_reservation():
     cache.invalidate_prefix("lots_list")
     
     return jsonify({
-        "message": f"{'Handicap' if requested_type == 'handicap' else 'Regular'} parking spot automatically allotted and booked successfully",
+        "message": f"{'Handicap' if requested_type == 'handicap' else 'Regular'} parking spot allotted on {floor_name} ({spot.spot_number}) and booked successfully",
         "reservation_id": reservation.id,
         "spot_id": spot.id,
         "spot_number": spot.spot_number,
         "spot_type": spot.spot_type,
+        "floor_id": floor_id_val,
+        "floor_name": floor_name,
+        "floor_number": spot.floor_number,
         "lot_name": spot.parking_lot.prime_location_name,
-        "parking_timestamp": reservation.parking_timestamp.isoformat(),
+        "parking_timestamp": format_iso(reservation.parking_timestamp),
         "status": reservation.status
     }), 201
 
@@ -1113,12 +1554,16 @@ def vacate_reservation(res_id):
     if reservation.status != 'active':
         return jsonify({"error": f"Reservation is already {reservation.status}"}), 400
         
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     reservation.leaving_timestamp = now
     reservation.status = 'completed'
     
-    # Calculate duration and parking cost
-    duration_hours = max((now - reservation.parking_timestamp).total_seconds() / 3600.0, 1.0)
+    # Calculate duration and parking cost (handling naive or aware start timestamp)
+    start_ts = reservation.parking_timestamp
+    if start_ts.tzinfo is None:
+        start_ts = start_ts.replace(tzinfo=timezone.utc)
+    duration_seconds = max((now - start_ts).total_seconds(), 0)
+    duration_hours = max(duration_seconds / 3600.0, 1.0)
     lot_price = reservation.parking_spot.parking_lot.price if reservation.parking_spot else 0.0
     reservation.parking_cost = round(duration_hours * lot_price, 2)
     
@@ -1135,8 +1580,8 @@ def vacate_reservation(res_id):
         "message": "Parking spot vacated and released successfully",
         "reservation_id": reservation.id,
         "spot_number": reservation.parking_spot.spot_number if reservation.parking_spot else '',
-        "parking_timestamp": reservation.parking_timestamp.isoformat(),
-        "leaving_timestamp": reservation.leaving_timestamp.isoformat(),
+        "parking_timestamp": format_iso(reservation.parking_timestamp),
+        "leaving_timestamp": format_iso(reservation.leaving_timestamp),
         "duration_hours": round(duration_hours, 2),
         "parking_cost": reservation.parking_cost,
         "status": reservation.status
@@ -1159,20 +1604,26 @@ def get_reservations():
     for r in reservations:
         spot = r.parking_spot
         lot = spot.parking_lot if spot else None
+        floor_name = r.floor_name or (spot.floor_name if spot else 'Ground Floor')
+        floor_id_val = r.floor_id or (spot.floor_id if spot else None)
+        floor_number_val = spot.floor_number if spot else 0
         result.append({
             "id": r.id,
             "spot_id": r.spot_id,
             "parking_spot_id": r.spot_id,
             "spot_number": spot.spot_number if spot else 'N/A',
+            "floor_id": floor_id_val,
+            "floor_name": floor_name,
+            "floor_number": floor_number_val,
             "lot_id": lot.id if lot else None,
             "lot_name": lot.prime_location_name if lot else 'N/A',
             "lot_price": lot.price if lot else 0.0,
             "vehicle_number": r.vehicle_number,
             "spot_type": r.spot_type or (spot.spot_type if spot else 'regular'),
-            "parking_timestamp": r.parking_timestamp.isoformat() if r.parking_timestamp else None,
-            "start_time": r.parking_timestamp.isoformat() if r.parking_timestamp else None,
-            "leaving_timestamp": r.leaving_timestamp.isoformat() if r.leaving_timestamp else None,
-            "end_time": r.leaving_timestamp.isoformat() if r.leaving_timestamp else None,
+            "parking_timestamp": format_iso(r.parking_timestamp),
+            "start_time": format_iso(r.parking_timestamp),
+            "leaving_timestamp": format_iso(r.leaving_timestamp),
+            "end_time": format_iso(r.leaving_timestamp),
             "parking_cost": r.parking_cost,
             "status": r.status,
             "remarks": r.remarks

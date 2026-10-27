@@ -143,20 +143,41 @@
                   </div>
                 </div>
 
-                <!-- Grid Dimension Pill -->
-                <div class="d-flex justify-content-between align-items-center p-2 px-3 bg-secondary-subtle rounded-3 mb-3 small text-secondary">
-                  <span><i class="bi bi-grid-3x3 me-1"></i> Grid Layout Size:</span>
-                  <strong>{{ lot.grid_rows }} rows × {{ lot.grid_cols }} columns ({{ lot.number_of_spots }} Total Slots)</strong>
+                <!-- Floor Selector / Indicator -->
+                <div class="d-flex justify-content-between align-items-center p-2 px-3 bg-secondary-subtle rounded-3 mb-2 small text-secondary">
+                  <span><i class="bi bi-layers-fill me-1"></i> Multi-Floor Facility:</span>
+                  <strong>🏢 {{ lot.floor_count || (lot.floors ? lot.floors.length : 1) }} Floor{{ (lot.floor_count || 1) > 1 ? 's' : '' }} ({{ lot.number_of_spots }} Total Slots)</strong>
                 </div>
 
-                <!-- Mini Grid Preview Thumbnail -->
-                <div v-if="lot.grid_layout" class="mini-grid-container mb-3 p-2 bg-light rounded-3 border">
-                  <div class="small text-muted mb-1 fw-semibold d-flex justify-content-between">
-                    <span>Layout Preview:</span>
-                    <span class="text-success">{{ lot.number_of_spots }} Slots</span>
+                <!-- Mini Grid Preview Thumbnail with Floor Selector -->
+                <div v-if="getLotPreviewFloor(lot)" class="mini-grid-container mb-3 p-2 bg-light rounded-3 border">
+                  <div class="small text-muted mb-1 fw-semibold d-flex justify-content-between align-items-center">
+                    <span class="d-flex align-items-center gap-1">
+                      <span>Floor:</span>
+                      <select 
+                        v-if="lot.floors && lot.floors.length > 1"
+                        :value="previewFloorIndex[lot.id] || 0"
+                        @change="setPreviewFloor(lot.id, $event.target.value)"
+                        class="form-select form-select-sm py-0 px-2 d-inline-block w-auto border-secondary-subtle"
+                        style="font-size: 0.75rem;"
+                      >
+                        <option v-for="(fl, fIdx) in lot.floors" :key="'preview-opt-' + fl.id" :value="fIdx">
+                          {{ fl.floor_name }} ({{ fl.regular_spots + fl.handicap_spots }} slots)
+                        </option>
+                      </select>
+                      <strong v-else class="text-primary">{{ getLotPreviewFloor(lot).floor_name || 'Ground Floor' }}</strong>
+                    </span>
+                    <span class="badge bg-success-subtle text-success small">
+                      {{ getLotPreviewFloor(lot).available_spots !== undefined ? getLotPreviewFloor(lot).available_spots : lot.available_spots }} Free
+                    </span>
                   </div>
-                  <div class="mini-grid" :style="{ gridTemplateColumns: `repeat(${lot.grid_cols}, 1fr)` }">
-                    <template v-for="(row, rIdx) in lot.grid_layout" :key="'r' + rIdx">
+                  
+                  <div 
+                    v-if="getLotPreviewFloor(lot).grid_layout && getLotPreviewFloor(lot).grid_layout.length"
+                    class="mini-grid" 
+                    :style="{ gridTemplateColumns: `repeat(${getLotPreviewFloor(lot).grid_cols || lot.grid_cols}, 1fr)` }"
+                  >
+                    <template v-for="(row, rIdx) in getLotPreviewFloor(lot).grid_layout" :key="'r' + rIdx">
                       <div 
                         v-for="(cell, cIdx) in row" 
                         :key="'c' + rIdx + '-' + cIdx"
@@ -213,29 +234,28 @@
             </div>
 
             <div class="modal-body p-4 bg-light">
-              <!-- Top Form Row: 1) Edit name of slot, 2) Edit cost of parking, 3) Edit grid size -->
-              <div class="card border-0 shadow-sm rounded-3 p-3 mb-4 bg-white">
-                <div class="row g-3 align-items-end">
-                  
+              <!-- Facility Meta Row: 1) Edit name of slot, 2) Edit cost of parking -->
+              <div class="card border-0 shadow-sm rounded-3 p-3 mb-3 bg-white">
+                <div class="row g-3">
                   <!-- 1) Edit name of slot / space -->
-                  <div class="col-md-4">
+                  <div class="col-md-6">
                     <label class="form-label fw-bold small text-secondary">
-                      1) Parking Space Name *
+                      1) Facility / Parking Space Name *
                     </label>
                     <div class="input-group">
-                      <span class="input-group-text bg-light text-muted"><i class="bi bi-tag-fill"></i></span>
+                      <span class="input-group-text bg-light text-muted"><i class="bi bi-building"></i></span>
                       <input 
                         v-model="editSlotForm.prime_location_name" 
                         type="text" 
                         class="form-control" 
-                        placeholder="e.g. Terminal A Plaza"
+                        placeholder="e.g. Grand Central Multi-Tier Parking"
                         required 
                       />
                     </div>
                   </div>
 
                   <!-- 2) Edit cost of parking -->
-                  <div class="col-md-3">
+                  <div class="col-md-6">
                     <label class="form-label fw-bold small text-secondary">
                       2) Cost of Parking (₹ / hr) *
                     </label>
@@ -252,17 +272,68 @@
                       />
                     </div>
                   </div>
+                </div>
+              </div>
 
-                  <!-- 3) Edit grid size - row and column info -->
+              <!-- Multi-Floor Management Section -->
+              <div class="card border-0 shadow-sm rounded-3 p-3 mb-3 bg-white">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="fw-bold small text-secondary text-uppercase">Multi-Floor Management:</span>
+                    <span class="badge bg-primary text-white">{{ editSlotForm.floors.length }} Floor{{ editSlotForm.floors.length > 1 ? 's' : '' }}</span>
+                  </div>
+                  <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-success fw-semibold" @click="addNewFloor">
+                      <i class="bi bi-plus-lg me-1"></i> Add Floor
+                    </button>
+                    <button 
+                      v-if="editSlotForm.floors.length > 1" 
+                      type="button" 
+                      class="btn btn-sm btn-outline-danger" 
+                      @click="removeActiveFloor"
+                      title="Remove current floor"
+                    >
+                      <i class="bi bi-trash me-1"></i> Remove Floor
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Floor Switcher Tabs -->
+                <ul class="nav nav-pills gap-1 p-1 bg-light rounded-3 border mb-3">
+                  <li v-for="(fl, idx) in editSlotForm.floors" :key="'fl-tab-' + idx" class="nav-item">
+                    <button 
+                      type="button" 
+                      class="nav-link py-1.5 px-3 rounded-2 fw-semibold small"
+                      :class="activeFloorIdx === idx ? 'active bg-primary text-white shadow-sm' : 'text-dark'"
+                      @click="activeFloorIdx = idx"
+                    >
+                      🏢 {{ fl.floor_name }}
+                      <span class="badge ms-1" :class="activeFloorIdx === idx ? 'bg-white text-primary' : 'bg-secondary text-white'">
+                        {{ getFloorSlotCount(fl) }} slots
+                      </span>
+                    </button>
+                  </li>
+                </ul>
+
+                <!-- Active Floor Configuration Bar -->
+                <div class="row g-2 align-items-center bg-light p-2.5 rounded-3 border">
                   <div class="col-md-5">
-                    <label class="form-label fw-bold small text-secondary">
-                      3) Grid Size (Rows & Columns)
-                    </label>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text bg-white text-muted">Floor Label</span>
+                      <input 
+                        v-model="currentFloor.floor_name" 
+                        type="text" 
+                        class="form-control" 
+                        placeholder="e.g. Ground Floor, Basement 1, Level 2"
+                      />
+                    </div>
+                  </div>
+                  <div class="col-md-7">
                     <div class="d-flex gap-2 align-items-center">
                       <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-light">Rows</span>
+                        <span class="input-group-text bg-white">Rows</span>
                         <input 
-                          v-model.number="editSlotForm.grid_rows" 
+                          v-model.number="currentFloor.grid_rows" 
                           type="number" 
                           min="2" 
                           max="15" 
@@ -270,9 +341,9 @@
                         />
                       </div>
                       <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-light">Cols</span>
+                        <span class="input-group-text bg-white">Cols</span>
                         <input 
-                          v-model.number="editSlotForm.grid_cols" 
+                          v-model.number="currentFloor.grid_cols" 
                           type="number" 
                           min="2" 
                           max="15" 
@@ -282,13 +353,12 @@
                       <button 
                         type="button" 
                         class="btn btn-outline-primary btn-sm text-nowrap fw-semibold"
-                        @click="resizeGrid"
+                        @click="resizeActiveFloorGrid"
                       >
                         Apply Size
                       </button>
                     </div>
                   </div>
-
                 </div>
               </div>
 
@@ -298,9 +368,9 @@
                   <div>
                     <h6 class="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
                       <i class="bi bi-cursor-fill text-primary"></i>
-                      <span>4) Edit Grid Space (Clickable Grid)</span>
+                      <span>Edit Floor Grid: {{ currentFloor.floor_name }}</span>
                     </h6>
-                    <small class="text-muted">Select an element below, then click squares on the grid to mark them.</small>
+                    <small class="text-muted">Select an element below, then click squares on the floor layout to mark them.</small>
                   </div>
 
                   <!-- Quick Preset Buttons -->
@@ -336,10 +406,28 @@
                   <button 
                     type="button" 
                     class="btn btn-sm palette-btn"
-                    :class="activeTool === 'road' ? 'btn-dark text-white shadow-sm ring-active' : 'btn-outline-dark bg-white'"
-                    @click="activeTool = 'road'"
+                    :class="activeTool === 'ramp_up' ? 'btn-info text-white shadow-sm ring-active' : 'btn-outline-secondary bg-white text-dark'"
+                    @click="activeTool = 'ramp_up'"
                   >
-                    🛣️ Road / Driveway
+                    🚗⤴️ Ramp Up
+                  </button>
+
+                  <button 
+                    type="button" 
+                    class="btn btn-sm palette-btn"
+                    :class="activeTool === 'ramp_down' ? 'btn-secondary text-white shadow-sm ring-active' : 'btn-outline-secondary bg-white text-dark'"
+                    @click="activeTool = 'ramp_down'"
+                  >
+                    🚗⤵️ Ramp Down
+                  </button>
+
+                  <button 
+                    type="button" 
+                    class="btn btn-sm palette-btn"
+                    :class="activeTool === 'elevator' ? 'btn-primary text-white shadow-sm ring-active' : 'btn-outline-primary bg-white text-dark'"
+                    @click="activeTool = 'elevator'"
+                  >
+                    🛗 Elevator
                   </button>
 
                   <button 
@@ -349,6 +437,15 @@
                     @click="activeTool = 'stairs'"
                   >
                     🪜 Stairs / Exit
+                  </button>
+
+                  <button 
+                    type="button" 
+                    class="btn btn-sm palette-btn"
+                    :class="activeTool === 'road' ? 'btn-dark text-white shadow-sm ring-active' : 'btn-outline-dark bg-white'"
+                    @click="activeTool = 'road'"
+                  >
+                    🛣️ Road
                   </button>
 
                   <button 
@@ -365,13 +462,17 @@
                 <div class="alert alert-info py-2 px-3 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2 small">
                   <div>
                     <i class="bi bi-info-circle-fill me-1"></i>
-                    Regular Parking: <strong>{{ computedRegularSlots }}</strong> | 
+                    <strong>{{ currentFloor.floor_name }}:</strong> 
+                    Regular: <strong>{{ computedRegularSlots }}</strong> | 
                     Handicap: <strong>{{ computedHandicapSlots }}</strong> | 
                     Roads: <strong>{{ computedRoads }}</strong> | 
                     Stairs: <strong>{{ computedStairs }}</strong>
+                    <span v-if="computedRampsUp > 0"> | Ramps Up: <strong>{{ computedRampsUp }}</strong></span>
+                    <span v-if="computedRampsDown > 0"> | Ramps Down: <strong>{{ computedRampsDown }}</strong></span>
+                    <span v-if="computedElevators > 0"> | Elevators: <strong>{{ computedElevators }}</strong></span>
                   </div>
                   <div class="badge bg-primary fs-6 fw-bold px-3 py-1.5 rounded-pill shadow-sm">
-                    Total Bookable Slots: {{ computedTotalSlots }}
+                    Total Facility Capacity: {{ computedGrandTotalSlots }} Slots
                   </div>
                 </div>
 
@@ -380,8 +481,8 @@
                   <div 
                     class="clickable-grid mx-auto" 
                     :style="{ 
-                      gridTemplateColumns: `repeat(${editSlotForm.grid_cols}, minmax(65px, 1fr))`,
-                      maxWidth: `${editSlotForm.grid_cols * 85}px` 
+                      gridTemplateColumns: `repeat(${currentFloor.grid_cols || 6}, minmax(65px, 1fr))`,
+                      maxWidth: `${(currentFloor.grid_cols || 6) * 85}px` 
                     }"
                   >
                     <template v-for="(row, rIdx) in currentMatrix" :key="'grid-r-' + rIdx">
@@ -398,6 +499,9 @@
                           <span v-else-if="cell.type === 'handicap'" class="cell-icon">♿</span>
                           <span v-else-if="cell.type === 'road'" class="cell-icon">🛣️</span>
                           <span v-else-if="cell.type === 'stairs'" class="cell-icon">🪜</span>
+                          <span v-else-if="cell.type === 'ramp_up'" class="cell-icon">🚗⤴️</span>
+                          <span v-else-if="cell.type === 'ramp_down'" class="cell-icon">🚗⤵️</span>
+                          <span v-else-if="cell.type === 'elevator'" class="cell-icon">🛗</span>
                           <span v-else class="cell-icon text-muted">·</span>
                           
                           <span class="cell-label">{{ getCellLabel(cell, rIdx, cIdx) }}</span>
@@ -409,7 +513,7 @@
 
                 <div class="text-muted small mt-2">
                   <i class="bi bi-lightbulb me-1"></i>
-                  <strong>Auto-calculation rule:</strong> The number of parking space and handicap space is added and saved as no. of slots in database upon saving.
+                  <strong>Auto-calculation rule:</strong> The total number of parking spaces and handicap spaces across all floors is aggregated and saved as total facility spots.
                 </div>
 
               </div>
@@ -418,7 +522,7 @@
             <!-- Modal Footer: Save and Cancel -->
             <div class="modal-footer bg-white border-top p-3 px-4 d-flex justify-content-between align-items-center">
               <span class="text-muted small">
-                Saving will update slot names, rates, dimensions, and register <strong>{{ computedTotalSlots }} slots</strong> into database.
+                Saving will update all <strong>{{ editSlotForm.floors.length }} floor layouts</strong>, dimensions, and register <strong>{{ computedGrandTotalSlots }} bookable slots</strong> in the database.
               </span>
               <div class="d-flex gap-2">
                 <button type="button" class="btn btn-secondary px-3" @click="closeEditSlotsModal">Cancel</button>
@@ -429,7 +533,7 @@
                   :disabled="savingSlots"
                 >
                   <span v-if="savingSlots" class="spinner-border spinner-border-sm"></span>
-                  <span>{{ savingSlots ? 'Saving Changes...' : '💾 Save & Update All Data' }}</span>
+                  <span>{{ savingSlots ? 'Saving Changes...' : '💾 Save & Update All Floors' }}</span>
                 </button>
               </div>
             </div>
@@ -671,17 +775,26 @@ export default {
       showEditSlotsModal: false,
       savingSlots: false,
       editingLot: null,
-      activeTool: 'parking', // 'parking', 'handicap', 'road', 'stairs', 'empty'
+      activeTool: 'parking', // 'parking', 'handicap', 'ramp_up', 'ramp_down', 'elevator', 'stairs', 'road', 'empty'
+      activeFloorIdx: 0,
+      previewFloorIndex: {},
       editSlotForm: {
         prime_location_name: '',
         price: 0,
-        grid_rows: 5,
-        grid_cols: 6
-      },
-      currentMatrix: [] // 2D array of { type: string }
+        floors: []
+      }
     }
   },
   computed: {
+    currentFloor() {
+      if (this.editSlotForm.floors && this.editSlotForm.floors.length > 0) {
+        return this.editSlotForm.floors[this.activeFloorIdx] || this.editSlotForm.floors[0]
+      }
+      return { floor_name: 'Ground Floor', floor_number: 0, grid_rows: 5, grid_cols: 6, matrix: [] }
+    },
+    currentMatrix() {
+      return this.currentFloor.matrix || []
+    },
     computedRegularSlots() {
       let count = 0
       for (const row of this.currentMatrix) {
@@ -720,6 +833,49 @@ export default {
         }
       }
       return count
+    },
+    computedRampsUp() {
+      let count = 0
+      for (const row of this.currentMatrix) {
+        for (const cell of row) {
+          if (cell.type === 'ramp_up') count++
+        }
+      }
+      return count
+    },
+    computedRampsDown() {
+      let count = 0
+      for (const row of this.currentMatrix) {
+        for (const cell of row) {
+          if (cell.type === 'ramp_down') count++
+        }
+      }
+      return count
+    },
+    computedElevators() {
+      let count = 0
+      for (const row of this.currentMatrix) {
+        for (const cell of row) {
+          if (cell.type === 'elevator') count++
+        }
+      }
+      return count
+    },
+    computedGrandTotalSlots() {
+      if (!this.editSlotForm.floors) return 0
+      let total = 0
+      for (const fl of this.editSlotForm.floors) {
+        if (fl.matrix) {
+          for (const row of fl.matrix) {
+            for (const cell of row) {
+              if (cell.type === 'parking' || cell.type === 'handicap') {
+                total++
+              }
+            }
+          }
+        }
+      }
+      return total
     }
   },
   mounted() {
@@ -833,45 +989,101 @@ export default {
       }
     },
 
+    getLotPreviewFloor(lot) {
+      if (lot.floors && lot.floors.length > 0) {
+        const idx = this.previewFloorIndex[lot.id] || 0
+        return lot.floors[idx] || lot.floors[0]
+      }
+      return lot
+    },
+    setPreviewFloor(lotId, floorIdx) {
+      this.previewFloorIndex = {
+        ...this.previewFloorIndex,
+        [lotId]: parseInt(floorIdx) || 0
+      }
+    },
+    getFloorSlotCount(fl) {
+      if (!fl || !fl.matrix) return 0
+      let c = 0
+      for (const row of fl.matrix) {
+        for (const cell of row) {
+          if (cell.type === 'parking' || cell.type === 'handicap') c++
+        }
+      }
+      return c
+    },
+    generateDefaultMatrix(rows, cols) {
+      const matrix = []
+      for (let r = 0; r < rows; r++) {
+        const rowArr = []
+        for (let c = 0; c < cols; c++) {
+          if (r === 1) {
+            rowArr.push({ type: 'road' })
+          } else if (r === rows - 1 && c === 0) {
+            rowArr.push({ type: 'handicap' })
+          } else if (r === rows - 1 && c === cols - 1) {
+            rowArr.push({ type: 'stairs' })
+          } else {
+            rowArr.push({ type: 'parking' })
+          }
+        }
+        matrix.push(rowArr)
+      }
+      return matrix
+    },
+
     // ==================== EDIT SLOTS METHODS ====================
     openEditSlotsModal(lot) {
       this.editingLot = lot
-      const rows = lot.grid_rows || 5
-      const cols = lot.grid_cols || 6
-      
       this.editSlotForm = {
         prime_location_name: lot.prime_location_name,
         price: lot.price,
-        grid_rows: rows,
-        grid_cols: cols
+        floors: []
       }
 
-      // Populate current matrix
-      if (lot.grid_layout && Array.isArray(lot.grid_layout) && lot.grid_layout.length === rows) {
-        // Deep copy existing grid
-        this.currentMatrix = lot.grid_layout.map(r => r.map(c => ({
-          type: typeof c === 'object' && c ? (c.type || 'parking') : String(c)
-        })))
-      } else {
-        // Generate initial matrix
-        this.currentMatrix = []
-        for (let r = 0; r < rows; r++) {
-          const rowArr = []
-          for (let c = 0; c < cols; c++) {
-            if (r === 1) {
-              rowArr.push({ type: 'road' })
-            } else if (r === rows - 1 && c === 0) {
-              rowArr.push({ type: 'handicap' })
-            } else if (r === rows - 1 && c === cols - 1) {
-              rowArr.push({ type: 'stairs' })
-            } else {
-              rowArr.push({ type: 'parking' })
-            }
+      if (lot.floors && lot.floors.length > 0) {
+        this.editSlotForm.floors = lot.floors.map(f => {
+          const rows = f.grid_rows || 5
+          const cols = f.grid_cols || 6
+          let matrix = []
+          if (f.grid_layout && Array.isArray(f.grid_layout) && f.grid_layout.length === rows) {
+            matrix = f.grid_layout.map(r => r.map(c => ({
+              type: typeof c === 'object' && c ? (c.type || 'parking') : String(c)
+            })))
+          } else {
+            matrix = this.generateDefaultMatrix(rows, cols)
           }
-          this.currentMatrix.push(rowArr)
+          return {
+            id: f.id,
+            floor_number: f.floor_number,
+            floor_name: f.floor_name || (f.floor_number === 0 ? 'Ground Floor' : `Floor ${f.floor_number}`),
+            grid_rows: rows,
+            grid_cols: cols,
+            matrix: matrix
+          }
+        })
+      } else {
+        const rows = lot.grid_rows || 5
+        const cols = lot.grid_cols || 6
+        let matrix = []
+        if (lot.grid_layout && Array.isArray(lot.grid_layout) && lot.grid_layout.length === rows) {
+          matrix = lot.grid_layout.map(r => r.map(c => ({
+            type: typeof c === 'object' && c ? (c.type || 'parking') : String(c)
+          })))
+        } else {
+          matrix = this.generateDefaultMatrix(rows, cols)
         }
+        this.editSlotForm.floors = [{
+          id: null,
+          floor_number: 0,
+          floor_name: 'Ground Floor',
+          grid_rows: rows,
+          grid_cols: cols,
+          matrix: matrix
+        }]
       }
 
+      this.activeFloorIdx = 0
       this.activeTool = 'parking'
       this.showEditSlotsModal = true
     },
@@ -879,25 +1091,53 @@ export default {
       this.showEditSlotsModal = false
       this.editingLot = null
     },
-    resizeGrid() {
-      const newRows = Math.min(Math.max(parseInt(this.editSlotForm.grid_rows) || 2, 2), 15)
-      const newCols = Math.min(Math.max(parseInt(this.editSlotForm.grid_cols) || 2, 2), 15)
-      this.editSlotForm.grid_rows = newRows
-      this.editSlotForm.grid_cols = newCols
+    addNewFloor() {
+      const existingNumbers = this.editSlotForm.floors.map(f => f.floor_number)
+      const nextNumber = existingNumbers.length > 0 ? (Math.max(0, ...existingNumbers) + 1) : 1
+      const floorName = nextNumber > 0 ? `Level ${nextNumber}` : `Floor ${nextNumber}`
+      const defaultRows = 5
+      const defaultCols = 6
+      const newFloor = {
+        id: null,
+        floor_number: nextNumber,
+        floor_name: floorName,
+        grid_rows: defaultRows,
+        grid_cols: defaultCols,
+        matrix: this.generateDefaultMatrix(defaultRows, defaultCols)
+      }
+      this.editSlotForm.floors.push(newFloor)
+      this.activeFloorIdx = this.editSlotForm.floors.length - 1
+    },
+    removeActiveFloor() {
+      if (this.editSlotForm.floors.length <= 1) {
+        alert('A facility must contain at least one floor.')
+        return
+      }
+      const fl = this.currentFloor
+      if (!confirm(`Are you sure you want to remove ${fl.floor_name}? Any slots on this floor will be deleted.`)) return
+      this.editSlotForm.floors.splice(this.activeFloorIdx, 1)
+      this.activeFloorIdx = Math.max(0, this.activeFloorIdx - 1)
+    },
+    resizeActiveFloorGrid() {
+      const fl = this.currentFloor
+      const newRows = Math.min(Math.max(parseInt(fl.grid_rows) || 2, 2), 15)
+      const newCols = Math.min(Math.max(parseInt(fl.grid_cols) || 2, 2), 15)
+      fl.grid_rows = newRows
+      fl.grid_cols = newCols
 
       const newMatrix = []
       for (let r = 0; r < newRows; r++) {
         const rowArr = []
         for (let c = 0; c < newCols; c++) {
-          if (this.currentMatrix[r] && this.currentMatrix[r][c]) {
-            rowArr.push({ type: this.currentMatrix[r][c].type || 'parking' })
+          if (fl.matrix[r] && fl.matrix[r][c]) {
+            rowArr.push({ type: fl.matrix[r][c].type || 'parking' })
           } else {
             rowArr.push({ type: r === 1 ? 'road' : 'parking' })
           }
         }
         newMatrix.push(rowArr)
       }
-      this.currentMatrix = newMatrix
+      fl.matrix = newMatrix
     },
     stampCell(r, c) {
       if (this.currentMatrix[r] && this.currentMatrix[r][c]) {
@@ -905,8 +1145,8 @@ export default {
       }
     },
     fillGrid(type) {
-      for (let r = 0; r < this.editSlotForm.grid_rows; r++) {
-        for (let c = 0; c < this.editSlotForm.grid_cols; c++) {
+      for (let r = 0; r < this.currentFloor.grid_rows; r++) {
+        for (let c = 0; c < this.currentFloor.grid_cols; c++) {
           if (this.currentMatrix[r] && this.currentMatrix[r][c]) {
             this.currentMatrix[r][c].type = type
           }
@@ -914,23 +1154,29 @@ export default {
       }
     },
     addRoadAisle() {
-      const mid = Math.floor(this.editSlotForm.grid_rows / 2)
-      for (let c = 0; c < this.editSlotForm.grid_cols; c++) {
+      const mid = Math.floor(this.currentFloor.grid_rows / 2)
+      for (let c = 0; c < this.currentFloor.grid_cols; c++) {
         if (this.currentMatrix[mid] && this.currentMatrix[mid][c]) {
           this.currentMatrix[mid][c].type = 'road'
         }
       }
     },
     getCellLabel(cell, r, c) {
-      if (cell.type === 'parking') return `P-${r + 1},${c + 1}`
-      if (cell.type === 'handicap') return `H-${r + 1},${c + 1}`
+      const pfx = this.currentFloor.floor_number === 0 
+        ? 'G' 
+        : (this.currentFloor.floor_number < 0 ? `B${Math.abs(this.currentFloor.floor_number)}` : `L${this.currentFloor.floor_number}`)
+      if (cell.type === 'parking') return `${pfx}-P${r + 1},${c + 1}`
+      if (cell.type === 'handicap') return `${pfx}-H${r + 1},${c + 1}`
       if (cell.type === 'road') return 'Road'
       if (cell.type === 'stairs') return 'Exit'
+      if (cell.type === 'ramp_up') return 'Ramp Up'
+      if (cell.type === 'ramp_down') return 'Ramp Down'
+      if (cell.type === 'elevator') return 'Elevator'
       return 'Empty'
     },
     async saveSlotsData() {
-      if (this.computedTotalSlots <= 0) {
-        alert('Please mark at least 1 Parking space or Handicap space in the grid!')
+      if (this.computedGrandTotalSlots <= 0) {
+        alert('Please mark at least 1 Parking space or Handicap space across your facility floors!')
         return
       }
 
@@ -939,9 +1185,14 @@ export default {
         const payload = {
           prime_location_name: this.editSlotForm.prime_location_name.trim(),
           price: this.editSlotForm.price,
-          grid_rows: this.editSlotForm.grid_rows,
-          grid_cols: this.editSlotForm.grid_cols,
-          grid_layout: this.currentMatrix
+          floors: this.editSlotForm.floors.map(f => ({
+            id: f.id,
+            floor_number: f.floor_number,
+            floor_name: f.floor_name,
+            grid_rows: f.grid_rows,
+            grid_cols: f.grid_cols,
+            grid_layout: f.matrix
+          }))
         }
 
         const res = await axios.put(
@@ -951,12 +1202,12 @@ export default {
         )
 
         this.showAlert(
-          `Slot configuration updated! Total ${res.data.number_of_spots} slots saved (${res.data.regular_spots} Regular + ${res.data.handicap_spots} Handicap).`
+          `Facility updated! Registered ${res.data.number_of_spots} total bookable slots across ${this.editSlotForm.floors.length} floors.`
         )
         this.closeEditSlotsModal()
         this.fetchDashboard()
       } catch (err) {
-        alert(err.response?.data?.error || 'Failed to save slots and layout')
+        alert(err.response?.data?.error || 'Failed to save slots and multi-floor layouts')
       } finally {
         this.savingSlots = false
       }
@@ -1069,6 +1320,24 @@ export default {
   background-color: #fff3cd;
   border-color: #ffc107;
   color: #664d03;
+}
+
+.cell-ramp_up {
+  background-color: #e0cffc;
+  border-color: #6f42c1;
+  color: #3d1a78;
+}
+
+.cell-ramp_down {
+  background-color: #d8b4fe;
+  border-color: #9333ea;
+  color: #581c87;
+}
+
+.cell-elevator {
+  background-color: #cff4fc;
+  border-color: #0dcaf0;
+  color: #055160;
 }
 
 .cell-empty {

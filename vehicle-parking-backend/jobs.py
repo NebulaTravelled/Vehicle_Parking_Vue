@@ -4,7 +4,7 @@ import uuid
 import threading
 import json
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from models import db, User, ParkingLot, ParkingSpot, Reservation, ExportJob, DailyReminderLog
 
 EXPORTS_DIR = os.path.join(os.path.dirname(__file__), 'instance', 'exports')
@@ -72,7 +72,7 @@ def _process_csv_export(app, user_id, job_id):
             job.status = 'completed'
             job.file_path = filepath
             job.filename = filename
-            job.completed_at = datetime.utcnow()
+            job.completed_at = datetime.now(timezone.utc)
             db.session.commit()
             
         except Exception as e:
@@ -112,7 +112,7 @@ def run_daily_reminders(app, webhook_url=None):
             return {"status": "skipped", "message": "No parking lots available to remind about."}
         
         # 2. Check users who have not visited in the last 24h
-        cutoff_time = datetime.utcnow() - timedelta(hours=24)
+        cutoff_time = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
         users = User.query.filter(User.role == 'user').all()
         
         target_users = []
@@ -174,7 +174,7 @@ def generate_user_monthly_report(user_id, year=None, month=None):
     - Most used parking lot by the user
     - Amount spent on parking for the month
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     year = year or now.year
     month = month or now.month
     

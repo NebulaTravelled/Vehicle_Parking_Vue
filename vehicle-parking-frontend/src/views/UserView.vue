@@ -72,27 +72,64 @@
         <!-- ==================== TAB 1: DASHBOARD & BOOKING ==================== -->
         <div v-if="activeTab === 'dashboard'">
           
-          <!-- Active Reservation Banner -->
-          <div v-if="activeReservation" class="card shadow-sm border-0 border-start border-warning border-5 mb-4 bg-white">
-            <div class="card-body p-4">
-              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div>
-                  <div class="d-flex align-items-center gap-2 mb-2">
-                    <span class="badge bg-warning text-dark">🟢 Active Parking Spot</span>
-                    <span v-if="activeReservation.spot_type === 'handicap'" class="badge bg-info text-dark">♿ Handicap Spot</span>
-                    <span v-else class="badge bg-secondary">🚗 Regular Spot</span>
+          <!-- Multi-Slot Active Reservations Section -->
+          <div v-if="activeReservations.length > 0" class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h5 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
+                <span class="badge bg-warning text-dark">{{ activeReservations.length }} Active</span>
+                <span>My Active Parking Reservations</span>
+              </h5>
+              <small class="text-muted">Independent live timers & billing per active spot</small>
+            </div>
+
+            <div class="row g-3">
+              <div v-for="res in activeReservations" :key="'active-' + res.id" class="col-md-6 col-lg-4">
+                <div class="card shadow-sm border-0 border-start border-warning border-5 h-100 bg-white">
+                  <div class="card-body p-3 d-flex flex-column justify-content-between">
+                    <div>
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-warning text-dark">🟢 Active</span>
+                        <span v-if="res.spot_type === 'handicap'" class="badge bg-info text-dark">♿ Handicap</span>
+                        <span v-else class="badge bg-secondary">🚗 Regular</span>
+                      </div>
+
+                      <h5 class="fw-bold text-primary mb-1">{{ res.lot_name }}</h5>
+                      <div class="badge bg-light text-secondary border mb-2">
+                        🏢 {{ res.floor_name || 'Ground Floor' }}
+                      </div>
+
+                      <div class="bg-light p-2.5 rounded-3 border small mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                          <span class="text-muted">Spot Number:</span>
+                          <strong class="text-dark fs-6">{{ res.spot_number }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                          <span class="text-muted">Vehicle Plate:</span>
+                          <strong>{{ res.vehicle_number }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                          <span class="text-muted">Entry Time:</span>
+                          <span>{{ formatTime(res.parking_timestamp) }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between text-primary border-top pt-1 mt-1">
+                          <span>Elapsed Time:</span>
+                          <strong class="font-monospace">⏱️ {{ getElapsed(res.parking_timestamp) }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between text-success">
+                          <span>Est. Current Cost:</span>
+                          <strong>₹{{ getRunningCost(res) }}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button 
+                      class="btn btn-outline-danger btn-sm w-100 fw-semibold shadow-sm"
+                      @click="handleVacateSpot(res.id)" 
+                      :disabled="vacating"
+                    >
+                      {{ vacating ? 'Releasing...' : '🚪 Vacate / Release Spot' }}
+                    </button>
                   </div>
-                  <h4 class="fw-bold mb-1 text-primary">{{ activeReservation.lot_name }}</h4>
-                  <p class="text-muted mb-0 small">
-                    Allotted Spot: <strong class="text-dark">{{ activeReservation.spot_number }}</strong> | 
-                    Vehicle: <strong>{{ activeReservation.vehicle_number }}</strong> | 
-                    Entry Time: {{ formatTime(activeReservation.parking_timestamp) }}
-                  </p>
-                </div>
-                <div>
-                  <button class="btn btn-danger btn-lg px-4 shadow-sm" @click="handleVacateSpot(activeReservation.id)" :disabled="vacating">
-                    {{ vacating ? 'Releasing Spot...' : '🚪 Vacate / Release Spot' }}
-                  </button>
                 </div>
               </div>
             </div>
@@ -102,7 +139,7 @@
           <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
               <h4 class="fw-bold mb-1">Available Parking Lots</h4>
-              <p class="text-muted small mb-0">Choose a parking lot. You can reserve Regular or Handicap accessible parking.</p>
+              <p class="text-muted small mb-0">Choose a parking lot. Customers can reserve multiple spots simultaneously for families or fleets.</p>
             </div>
             <button class="btn btn-outline-success btn-sm" @click="fetchLots">🔄 Refresh Lots</button>
           </div>
@@ -122,8 +159,15 @@
                     <span class="badge bg-success fs-6">₹{{ lot.price }}/hr</span>
                   </div>
                   <p class="text-muted small mb-1">{{ lot.address }}</p>
-                  <p class="text-muted small mb-3">PIN: {{ lot.pin_code }}</p>
+                  <p class="text-muted small mb-2">PIN: {{ lot.pin_code }}</p>
                   
+                  <!-- Floor Count Badge -->
+                  <div class="mb-2">
+                    <span class="badge bg-secondary-subtle text-secondary border">
+                      🏢 {{ lot.floor_count || (lot.floors ? lot.floors.length : 1) }} Floor{{ (lot.floor_count || 1) > 1 ? 's' : '' }}
+                    </span>
+                  </div>
+
                   <!-- Slot Type Breakdown -->
                   <div class="bg-light p-2.5 rounded-3 mb-3 small border">
                     <div class="d-flex justify-content-between mb-1">
@@ -143,11 +187,10 @@
                   <div class="mt-auto">
                     <button
                       class="btn btn-success w-100 py-2 fw-semibold shadow-sm"
-                      :disabled="lot.available_spots === 0 || activeReservation !== null"
+                      :disabled="lot.available_spots === 0"
                       @click="openBookingModal(lot)"
                     >
-                      <span v-if="activeReservation !== null">Active spot already in use</span>
-                      <span v-else-if="lot.available_spots === 0">Fully Booked (0 Available)</span>
+                      <span v-if="lot.available_spots === 0">Fully Booked (0 Available)</span>
                       <span v-else>Book Spot (Regular / Handicap)</span>
                     </button>
                   </div>
@@ -198,6 +241,7 @@
                     <tr>
                       <th>#</th>
                       <th>Location / Lot</th>
+                      <th>Floor</th>
                       <th>Spot Number</th>
                       <th>Type</th>
                       <th>Vehicle Number</th>
@@ -212,6 +256,9 @@
                     <tr v-for="res in reservations" :key="res.id">
                       <td>{{ res.id }}</td>
                       <td class="fw-semibold text-primary">{{ res.lot_name }}</td>
+                      <td>
+                        <span class="badge bg-light text-secondary border">🏢 {{ res.floor_name || 'Ground Floor' }}</span>
+                      </td>
                       <td><span class="badge bg-secondary">{{ res.spot_number }}</span></td>
                       <td>
                         <span v-if="res.spot_type === 'handicap'" class="badge bg-info text-dark">♿ Handicap</span>
@@ -362,6 +409,33 @@
                   </div>
                 </div>
 
+                <!-- Multi-Floor Selection (Optional Preference) -->
+                <div v-if="selectedLot?.floors && selectedLot.floors.length > 1" class="mb-3">
+                  <label class="form-label fw-bold">Select Preferred Floor (Optional)</label>
+                  <select v-model="bookingForm.floor_id" class="form-select">
+                    <option :value="null">Any Floor (Lowest Level First)</option>
+                    <option v-for="fl in selectedLot.floors" :key="'modal-fl-' + fl.id" :value="fl.id">
+                      🏢 {{ fl.floor_name }} ({{ fl.available_spots }} spots available)
+                    </option>
+                  </select>
+                  <div class="form-text small">Multi-deck facility: pick a specific deck or let system auto-assign nearest to entrance.</div>
+                </div>
+
+                <!-- Parking Entry / Booking Time Selection -->
+                <div class="mb-3">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label fw-bold mb-0">Parking Entry / Booking Time *</label>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle small">Selected Time</span>
+                  </div>
+                  <input
+                    v-model="bookingForm.parking_timestamp"
+                    type="datetime-local"
+                    class="form-control"
+                    required
+                  />
+                  <div class="form-text small">Captured automatically when this booking was selected. You can also adjust if pre-planning.</div>
+                </div>
+
                 <div class="mb-3">
                   <label class="form-label fw-bold">Vehicle Registration Number *</label>
                   <input
@@ -422,12 +496,17 @@ export default {
       alertType: 'success',
       lots: [],
       reservations: [],
+      activeReservations: [],
       activeReservation: null,
+      nowTimestamp: Date.now(),
+      timerInterval: null,
       showBookingModal: false,
       selectedLot: null,
       bookingForm: {
         vehicle_number: '',
-        remarks: ''
+        remarks: '',
+        spot_type: 'regular',
+        floor_id: null
       },
       bookingSubmitting: false,
       vacating: false,
@@ -464,11 +543,49 @@ export default {
       this.fetchLots()
       this.fetchReservations()
     }
+    this.timerInterval = setInterval(() => {
+      this.nowTimestamp = Date.now()
+    }, 1000)
+  },
+  beforeUnmount() {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval)
+    }
   },
   methods: {
     getAuthHeaders() {
       const token = localStorage.getItem('userToken')
       return { headers: { Authorization: `Bearer ${token}` } }
+    },
+    getElapsed(parkingTimestamp) {
+      if (!parkingTimestamp) return '0s'
+      const safeStr = (parkingTimestamp.endsWith('Z') || parkingTimestamp.includes('+')) 
+        ? parkingTimestamp 
+        : `${parkingTimestamp}Z`
+      const start = new Date(safeStr).getTime()
+      if (isNaN(start)) return '0s'
+      const diffSecs = Math.max(0, Math.floor((this.nowTimestamp - start) / 1000))
+      const hours = Math.floor(diffSecs / 3600)
+      const minutes = Math.floor((diffSecs % 3600) / 60)
+      const seconds = diffSecs % 60
+      if (hours > 0) {
+        return `${hours}h ${minutes}m ${seconds}s`
+      } else if (minutes > 0) {
+        return `${minutes}m ${seconds}s`
+      } else {
+        return `${seconds}s`
+      }
+    },
+    getRunningCost(res) {
+      if (!res.parking_timestamp) return '0.00'
+      const safeStr = (res.parking_timestamp.endsWith('Z') || res.parking_timestamp.includes('+')) 
+        ? res.parking_timestamp 
+        : `${res.parking_timestamp}Z`
+      const start = new Date(safeStr).getTime()
+      if (isNaN(start)) return '0.00'
+      const diffHours = Math.max(1, (this.nowTimestamp - start) / 3600000)
+      const price = res.price_per_hour || res.lot_price || 0
+      return (diffHours * price).toFixed(2)
     },
     openRegister() {
       this.registerSuccessMessage = ''
@@ -492,6 +609,7 @@ export default {
       localStorage.removeItem('userToken')
       localStorage.removeItem('userData')
       this.isLoggedIn = false
+      this.activeReservations = []
       this.activeReservation = null
       this.reservations = []
       this.lots = []
@@ -503,7 +621,9 @@ export default {
     },
     formatTime(isoStr) {
       if (!isoStr) return 'N/A'
-      return new Date(isoStr).toLocaleString()
+      const safeStr = (isoStr.endsWith('Z') || isoStr.includes('+')) ? isoStr : `${isoStr}Z`
+      const d = new Date(safeStr)
+      return isNaN(d.getTime()) ? new Date(isoStr).toLocaleString() : d.toLocaleString()
     },
     async fetchLots() {
       try {
@@ -517,8 +637,8 @@ export default {
       try {
         const res = await axios.get('http://localhost:5000/api/reservations', this.getAuthHeaders())
         this.reservations = res.data.reservations || []
-        // Look for any active reservation
-        this.activeReservation = this.reservations.find(r => r.status === 'active') || null
+        this.activeReservations = this.reservations.filter(r => r.status === 'active')
+        this.activeReservation = this.activeReservations[0] || null
       } catch (err) {
         if (err.response?.status === 401) {
           this.logout()
@@ -530,22 +650,44 @@ export default {
       const defaultType = (lot.regular_available_spots > 0 || lot.regular_available_spots === undefined)
         ? 'regular'
         : (lot.handicap_available_spots > 0 ? 'handicap' : 'regular')
-      this.bookingForm = { vehicle_number: '', remarks: '', spot_type: defaultType }
+      
+      // Capture the exact local time when the booking is selected
+      const now = new Date()
+      const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+
+      this.bookingForm = {
+        vehicle_number: '',
+        remarks: '',
+        spot_type: defaultType,
+        floor_id: null,
+        parking_timestamp: localIso
+      }
       this.showBookingModal = true
     },
     async submitBooking() {
       if (!this.bookingForm.vehicle_number.trim()) return
       this.bookingSubmitting = true
       try {
+        // Parse the user's selected entry timestamp
+        const selectedDate = this.bookingForm.parking_timestamp 
+          ? new Date(this.bookingForm.parking_timestamp) 
+          : new Date()
+        const isoTimestamp = !isNaN(selectedDate.getTime()) 
+          ? selectedDate.toISOString() 
+          : new Date().toISOString()
+
         const payload = {
           lot_id: this.selectedLot.id,
           vehicle_number: this.bookingForm.vehicle_number.trim(),
           remarks: this.bookingForm.remarks.trim(),
-          spot_type: this.bookingForm.spot_type || 'regular'
+          spot_type: this.bookingForm.spot_type || 'regular',
+          floor_id: this.bookingForm.floor_id,
+          parking_timestamp: isoTimestamp
         }
         const res = await axios.post('http://localhost:5000/api/reservations', payload, this.getAuthHeaders())
         const typeLabel = res.data.spot_type === 'handicap' ? 'Handicap' : 'Regular'
-        this.showAlert(`${typeLabel} spot "${res.data.spot_number}" automatically allotted in ${res.data.lot_name}!`)
+        const floorText = res.data.floor_name ? ` on ${res.data.floor_name}` : ''
+        this.showAlert(`${typeLabel} spot "${res.data.spot_number}"${floorText} automatically allotted in ${res.data.lot_name}!`)
         this.showBookingModal = false
         this.fetchLots()
         this.fetchReservations()

@@ -85,6 +85,10 @@ export default {
       this.error = ''
       try {
         const res = await axios.post('http://localhost:5000/api/auth/login', this.form)
+        if (res.data.user.role !== 'admin') {
+          this.error = 'Super Admin access required. Non-admin accounts cannot access this portal.'
+          return
+        }
         localStorage.setItem('adminToken', res.data.access_token)
         localStorage.setItem('adminUser', JSON.stringify(res.data.user))
         this.$emit('login-success')

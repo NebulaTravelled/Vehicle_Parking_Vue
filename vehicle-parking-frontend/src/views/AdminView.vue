@@ -150,6 +150,15 @@
               <span class="badge bg-dark text-white px-2.5 py-1.5 rounded-pill">
                 🛣️ Road / Driveway
               </span>
+              <span class="badge text-white px-2.5 py-1.5 rounded-pill" style="background-color: #6f42c1;">
+                🚗⤴️ Ramp Up
+              </span>
+              <span class="badge text-white px-2.5 py-1.5 rounded-pill" style="background-color: #9333ea;">
+                🚗⤵️ Ramp Down
+              </span>
+              <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2.5 py-1.5 rounded-pill">
+                🛗 Elevator
+              </span>
               <span class="badge bg-warning text-dark px-2.5 py-1.5 rounded-pill">
                 🪜 Stairs / Exit
               </span>
@@ -186,38 +195,62 @@
                 </div>
 
                 <div class="card-body p-4 bg-light">
+                  <!-- Multi-Floor Deck Navigation Tabs -->
+                  <div v-if="lot.floors && lot.floors.length > 1" class="d-flex flex-wrap align-items-center gap-1 mb-3 bg-white p-2 rounded-3 border">
+                    <span class="small fw-bold text-secondary me-1">Floor Level:</span>
+                    <button 
+                      v-for="(fl, fIdx) in lot.floors" 
+                      :key="'admin-fl-' + fl.id"
+                      type="button"
+                      class="btn btn-xs rounded-pill px-3 py-1 fw-semibold"
+                      :class="(selectedFloorByLot[lot.id] || 0) === fIdx ? 'btn-primary text-white shadow-sm' : 'btn-outline-secondary bg-white'"
+                      @click="setAdminActiveFloor(lot.id, fIdx)"
+                    >
+                      🏢 {{ fl.floor_name }} ({{ fl.available_count }} free)
+                    </button>
+                  </div>
+
                   <!-- Summary Pill Badges for All Elements -->
                   <div class="d-flex flex-wrap gap-2 mb-3 small bg-white p-2.5 rounded-3 border">
                     <span class="badge bg-light text-dark border">
-                      🚗 Regular: <strong>{{ lot.regular_available }} / {{ lot.regular_spots }}</strong> Free
+                      🚗 Regular: <strong>{{ getAdminActiveFloor(lot).regular_available !== undefined ? getAdminActiveFloor(lot).regular_available : lot.regular_available }} / {{ getAdminActiveFloor(lot).regular_spots }}</strong> Free
                     </span>
                     <span class="badge bg-light text-primary border">
-                      ♿ Handicap: <strong>{{ lot.handicap_available }} / {{ lot.handicap_spots }}</strong> Free
+                      ♿ Handicap: <strong>{{ getAdminActiveFloor(lot).handicap_available !== undefined ? getAdminActiveFloor(lot).handicap_available : lot.handicap_available }} / {{ getAdminActiveFloor(lot).handicap_spots }}</strong> Free
                     </span>
                     <span class="badge bg-dark-subtle text-dark border">
-                      🛣️ Roads: <strong>{{ lot.roads_count || 0 }}</strong>
+                      🛣️ Roads: <strong>{{ getAdminActiveFloor(lot).roads_count || 0 }}</strong>
                     </span>
                     <span class="badge bg-warning-subtle text-dark border">
-                      🪜 Stairs: <strong>{{ lot.stairs_count || 0 }}</strong>
+                      🪜 Stairs: <strong>{{ getAdminActiveFloor(lot).stairs_count || 0 }}</strong>
+                    </span>
+                    <span v-if="getAdminActiveFloor(lot).ramp_up_count > 0" class="badge text-white border" style="background-color: #6f42c1;">
+                      🚗⤴️ Ramps Up: <strong>{{ getAdminActiveFloor(lot).ramp_up_count }}</strong>
+                    </span>
+                    <span v-if="getAdminActiveFloor(lot).ramp_down_count > 0" class="badge text-white border" style="background-color: #9333ea;">
+                      🚗⤵️ Ramps Down: <strong>{{ getAdminActiveFloor(lot).ramp_down_count }}</strong>
+                    </span>
+                    <span v-if="getAdminActiveFloor(lot).elevator_count > 0" class="badge bg-info-subtle text-info border">
+                      🛗 Elevators: <strong>{{ getAdminActiveFloor(lot).elevator_count }}</strong>
                     </span>
                     <span class="badge bg-light text-muted border">
-                      ⬜ Empty: <strong>{{ lot.empty_count || 0 }}</strong>
+                      ⬜ Empty: <strong>{{ getAdminActiveFloor(lot).empty_count || 0 }}</strong>
                     </span>
                     <span class="ms-auto text-muted small">
-                      Grid: <strong>{{ lot.grid_rows }} × {{ lot.grid_cols }}</strong>
+                      {{ getAdminActiveFloor(lot).floor_name || 'Ground' }} ({{ getAdminActiveFloor(lot).grid_rows }} × {{ getAdminActiveFloor(lot).grid_cols }})
                     </span>
                   </div>
 
-                  <!-- Visual Grid Canvas (Roads, Handicap, Regular, Stairs, Empty) -->
-                  <div v-if="lot.grid_layout && lot.grid_layout.length" class="admin-grid-wrapper p-3 bg-white rounded-3 border overflow-auto">
+                  <!-- Visual Grid Canvas (Roads, Handicap, Regular, Stairs, Ramps, Elevators, Empty) -->
+                  <div v-if="getAdminActiveFloor(lot).grid_layout && getAdminActiveFloor(lot).grid_layout.length" class="admin-grid-wrapper p-3 bg-white rounded-3 border overflow-auto">
                     <div 
                       class="admin-grid mx-auto" 
                       :style="{ 
-                        gridTemplateColumns: `repeat(${lot.grid_cols}, minmax(75px, 1fr))`,
-                        maxWidth: `${lot.grid_cols * 105}px` 
+                        gridTemplateColumns: `repeat(${getAdminActiveFloor(lot).grid_cols}, minmax(75px, 1fr))`,
+                        maxWidth: `${getAdminActiveFloor(lot).grid_cols * 105}px` 
                       }"
                     >
-                      <template v-for="(row, rIdx) in lot.grid_layout" :key="'admin-r-' + rIdx">
+                      <template v-for="(row, rIdx) in getAdminActiveFloor(lot).grid_layout" :key="'admin-r-' + rIdx">
                         <div 
                           v-for="(cell, cIdx) in row" 
                           :key="'admin-cell-' + rIdx + '-' + cIdx"
@@ -254,6 +287,27 @@
                             <span class="cell-icon">🛣️</span>
                             <span class="cell-title">Road</span>
                             <span class="cell-sub-dash">────</span>
+                          </div>
+
+                          <!-- Ramp Up -->
+                          <div v-else-if="cell.type === 'ramp_up'" class="cell-inner">
+                            <span class="cell-icon">🚗⤴️</span>
+                            <span class="cell-title">Ramp Up</span>
+                            <span class="cell-sub text-muted">To Deck Above</span>
+                          </div>
+
+                          <!-- Ramp Down -->
+                          <div v-else-if="cell.type === 'ramp_down'" class="cell-inner">
+                            <span class="cell-icon">🚗⤵️</span>
+                            <span class="cell-title">Ramp Down</span>
+                            <span class="cell-sub text-muted">To Deck Below</span>
+                          </div>
+
+                          <!-- Elevator -->
+                          <div v-else-if="cell.type === 'elevator'" class="cell-inner">
+                            <span class="cell-icon">🛗</span>
+                            <span class="cell-title">Elevator</span>
+                            <span class="cell-sub text-muted">Lift Core</span>
                           </div>
 
                           <!-- Stairs / Exit -->
@@ -537,6 +591,7 @@ export default {
       modalMode: 'create',
       selectedLotId: null,
       lotSaving: false,
+      selectedFloorByLot: {},
       lotForm: {
         prime_location_name: '',
         address: '',
@@ -699,6 +754,9 @@ export default {
         return cell.spot?.status === 'O' ? 'cell-handicap-occupied' : 'cell-handicap-available'
       }
       if (type === 'road') return 'cell-road'
+      if (type === 'ramp_up') return 'cell-ramp-up'
+      if (type === 'ramp_down') return 'cell-ramp-down'
+      if (type === 'elevator') return 'cell-elevator'
       if (type === 'stairs') return 'cell-stairs'
       return 'cell-empty'
     },
@@ -714,8 +772,24 @@ export default {
         return `Handicap Parking: ${spotName} - ${status}`
       }
       if (cell.type === 'road') return `Driveway / Road (Row ${rIdx + 1}, Col ${cIdx + 1})`
+      if (cell.type === 'ramp_up') return `Ramp Up to upper floor (Row ${rIdx + 1}, Col ${cIdx + 1})`
+      if (cell.type === 'ramp_down') return `Ramp Down to lower floor (Row ${rIdx + 1}, Col ${cIdx + 1})`
+      if (cell.type === 'elevator') return `Elevator / Lift Core (Row ${rIdx + 1}, Col ${cIdx + 1})`
       if (cell.type === 'stairs') return `Stairs / Walkway Exit (Row ${rIdx + 1}, Col ${cIdx + 1})`
       return `Empty Slot (Row ${rIdx + 1}, Col ${cIdx + 1})`
+    },
+    getAdminActiveFloor(lot) {
+      if (!lot.floors || lot.floors.length === 0) {
+        return lot
+      }
+      const idx = this.selectedFloorByLot[lot.id] || 0
+      return lot.floors[idx] || lot.floors[0] || lot
+    },
+    setAdminActiveFloor(lotId, floorIdx) {
+      this.selectedFloorByLot = {
+        ...this.selectedFloorByLot,
+        [lotId]: floorIdx
+      }
     }
   }
 }
@@ -851,6 +925,27 @@ export default {
   background-color: #fff3cd;
   border-color: #ffc107;
   color: #664d03;
+}
+
+/* Ramp Up */
+.cell-ramp-up {
+  background-color: #f3e8ff;
+  border-color: #6f42c1;
+  color: #432874;
+}
+
+/* Ramp Down */
+.cell-ramp-down {
+  background-color: #fae8ff;
+  border-color: #9333ea;
+  color: #581c87;
+}
+
+/* Elevator */
+.cell-elevator {
+  background-color: #e0f2fe;
+  border-color: #0284c7;
+  color: #0369a1;
 }
 
 /* Empty Slot */
