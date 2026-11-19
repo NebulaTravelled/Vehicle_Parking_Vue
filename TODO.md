@@ -225,11 +225,11 @@ Comprehensive pricing engine for facilities with granular rules, grace periods, 
 ### Overview
 Enable recurring parking plans for corporate tenants, fleets, and daily commuters.
 
-- [ ] **Subscription Plans**:
+- [x] **Subscription Plans**:
   - Types:
     - **Dedicated Slot**: Assigned specific fixed slot on a designated floor (e.g. Level 1, Slot #104 reserved 24/7).
     - **Floating Slot**: Guaranteed access to any available regular spot in the facility during business hours.
-- [ ] **Subscription Management**:
+- [x] **Subscription Management**:
   - Billing cycle: Monthly / Quarterly / Annual.
   - Automatic renewal status and active valid date range.
   - Digital Pass / QR code badge for subscribers for swift gate entry without daily payment steps.
@@ -241,11 +241,11 @@ Enable recurring parking plans for corporate tenants, fleets, and daily commuter
 ### Overview
 Instant bi-directional state synchronization so parking spot changes reflect immediately across all connected browsers and floor views.
 
-- [ ] **Live Event Streaming (Flask-SocketIO or SSE)**:
+- [x] **Live Event Streaming (Flask-SocketIO or SSE)**:
   - Broadcast events on spot status transitions:
     - `spot_reserved` → `{ lot_id, floor_id, spot_id, status: 'O' }`
     - `spot_vacated` → `{ lot_id, floor_id, spot_id, status: 'A' }`
-- [ ] **Real-Time Vue Map Updates**:
+- [x] **Real-Time Vue Map Updates**:
   - Live 2D grid updates on the active floor without page refresh:
     - Spot instantly transitions color (Green to Red / Occupied).
     - Floor vacancy counter updates live (`Floor G: X vacant, Floor 1: Y vacant`).
@@ -256,15 +256,15 @@ Instant bi-directional state synchronization so parking spot changes reflect imm
 ## 12. 📊 Analytics, Utilization & Revenue Heatmaps
 
 ### Overview
-Executive and facility-level business intelligence to optimize parking lot yield across multi-level facilities.
+Executive and facility-level business intelligence to optimize parking lot yield across multi-level facilities. Visible strictly to Admin and Company accounts (Customer accounts restricted with HTTP 403 Forbidden).
 
-- [ ] **Multi-Floor Utilization & Occupancy Heatmaps**:
+- [x] **Multi-Floor Utilization & Occupancy Heatmaps**:
   - Visual matrix showing utilization intensity by floor, aisle, and time-of-day.
   - Compare floor efficiency (e.g., Ground Floor 98% utilization vs Basement 2 30% utilization).
-- [ ] **Revenue & Yield Analytics**:
+- [x] **Revenue & Yield Analytics**:
   - Total revenue per floor / per slot / per square foot.
   - Peak revenue days and hours.
-- [ ] **Vehicle Turnover Metrics**:
+- [x] **Vehicle Turnover Metrics**:
   - Average dwell time (duration per vehicle).
   - Breakdown by vehicle type (Car vs SUV vs EV vs Motorcycle).
   - Customer return rate and repeat parker analytics.
@@ -279,7 +279,7 @@ Executive and facility-level business intelligence to optimize parking lot yield
 | **Milestone 2: Quick-Book Engine & Garage** | • Atomic row locking (`with_for_update`) & Lowest Floor / Nearest-to-Entry heuristic<br>• Customer Vehicle Garage (multi-car management)<br>• Location hierarchy audit (`Venue → Floor → Slot`) | **Completed ✅** |
 | **Milestone 3: Digital Pass & QR Automation** | • Dynamic QR code pass generation on Vue dashboard<br>• Gate QR scanner endpoint (check-in / check-out automation)<br>• Gate attendant / camera simulator UI | **Sprint 3** |
 | **Milestone 4: Advance Booking & Tiered Pricing** | • Pre-booking / future time slot scheduler<br>• Tiered pricing (hourly, daily, overnight, peak surcharges)<br>• 15-minute grace period & overstay penalty engine | **Completed ✅** |
-| **Milestone 5: Real-time Live Map & BI** | • WebSocket / SSE broadcast for multi-floor spot state changes<br>• Monthly/Corporate pass management<br>• Multi-floor utilization heatmaps & revenue charts | **Sprint 5** |
+| **Milestone 5: Real-time Live Map & BI** | • WebSocket / SSE broadcast for multi-floor spot state changes<br>• Monthly/Corporate pass management<br>• Multi-floor utilization heatmaps & revenue charts (Admin & Company restricted) | **Completed ✅** |
 
 ---
 

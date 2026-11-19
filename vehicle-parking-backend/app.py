@@ -1,14 +1,17 @@
 import json
 import os
+import queue
 import re
+import threading
+import uuid
 from datetime import datetime, timedelta, timezone
-from flask import Flask, jsonify, request, send_file, make_response
+from flask import Flask, jsonify, request, send_file, make_response, Response
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 
 import config
-from models import db, User, ParkingLot, ParkingSpot, Reservation, ExportJob, DailyReminderLog, ParkingFloor, Vehicle
+from models import db, User, ParkingLot, ParkingSpot, Reservation, ExportJob, DailyReminderLog, ParkingFloor, Vehicle, Subscription
 from cache import cache, cached
 from jobs import trigger_csv_export, run_daily_reminders, generate_user_monthly_report
 
@@ -105,6 +108,35 @@ def serialize_floor(floor):
             for s in sorted(spots, key=lambda x: (x.row_idx if x.row_idx is not None else 0, x.col_idx if x.col_idx is not None else 0, x.id))
         ]
     }
+
+
+class EventBroadcaster:
+    """Thread-safe Server-Sent Events (SSE) broadcaster for real-time spot transitions"""
+    def __init__(self):
+        self.listeners = []
+        self.lock = threading.Lock()
+
+    def listen(self):
+        q = queue.Queue(maxsize=100)
+        with self.lock:
+            self.listeners.append(q)
+        return q
+
+    def unlisten(self, q):
+        with self.lock:
+            if q in self.listeners:
+                self.listeners.remove(q)
+
+    def broadcast(self, data):
+        with self.lock:
+            for q in list(self.listeners):
+                try:
+                    q.put_nowait(data)
+                except Exception:
+                    if q in self.listeners:
+                        self.listeners.remove(q)
+
+spot_broadcaster = EventBroadcaster()
 
 
 def create_default_admin():
@@ -384,7 +416,19 @@ def get_admin_dashboard():
     if not admin or admin.role != 'admin':
         return jsonify({"error": "Admin access required"}), 403
     
-    lots = ParkingLot.query.all()
+    search_term = request.args.get('search', request.args.get('q', '')).strip()
+    if search_term:
+        pattern = f"%{search_term}%"
+        lots = ParkingLot.query.filter(
+            db.or_(
+                ParkingLot.prime_location_name.ilike(pattern),
+                ParkingLot.address.ilike(pattern),
+                ParkingLot.pin_code.ilike(pattern)
+            )
+        ).all()
+    else:
+        lots = ParkingLot.query.all()
+
     total_spots = ParkingSpot.query.count()
     available_spots = ParkingSpot.query.filter_by(status='A').count()
     occupied_spots = ParkingSpot.query.filter_by(status='O').count()
@@ -806,9 +850,20 @@ def get_company_lots():
 def get_parking_lots():
     """
     Get all parking lots with real-time available and occupied spot counts,
-    including regular and handicap counts.
+    including regular and handicap counts. Supports searching by name, address, or pin_code.
     """
-    lots = ParkingLot.query.all()
+    search_term = request.args.get('search', request.args.get('q', '')).strip()
+    if search_term:
+        pattern = f"%{search_term}%"
+        lots = ParkingLot.query.filter(
+            db.or_(
+                ParkingLot.prime_location_name.ilike(pattern),
+                ParkingLot.address.ilike(pattern),
+                ParkingLot.pin_code.ilike(pattern)
+            )
+        ).all()
+    else:
+        lots = ParkingLot.query.all()
     result = []
     
     for lot in lots:
@@ -1818,6 +1873,24 @@ def create_reservation():
     
     cache.invalidate_prefix("lots_list")
     
+    # Broadcast real-time SSE live event
+    try:
+        spot_broadcaster.broadcast({
+            "event": "spot_reserved" if reservation.status == 'active' else "spot_scheduled",
+            "spot_id": spot.id,
+            "lot_id": spot.lot_id,
+            "floor_id": floor_id_val,
+            "floor_number": floor_num_val,
+            "spot_number": spot.spot_number,
+            "spot_type": spot.spot_type,
+            "status": spot.status,
+            "vehicle_number": vehicle_number,
+            "booking_type": booking_type,
+            "timestamp": format_iso(parking_ts)
+        })
+    except Exception as e:
+        app.logger.warning(f"SSE spot broadcast error: {e}")
+    
     action_type_label = "Pre-booked for schedule" if booking_type == 'scheduled' else "Booked & Allotted"
     return jsonify({
         "message": f"{'Handicap' if requested_type == 'handicap' else 'Regular'} parking spot {action_type_label} on {floor_name} ({spot.spot_number}) successfully",
@@ -1940,6 +2013,23 @@ def vacate_reservation(res_id):
     
     # Invalidate cache
     cache.invalidate_prefix("lots_list")
+    
+    # Broadcast real-time SSE live event
+    if reservation.parking_spot:
+        try:
+            spot_broadcaster.broadcast({
+                "event": "spot_vacated",
+                "spot_id": reservation.parking_spot.id,
+                "lot_id": reservation.parking_spot.lot_id,
+                "floor_id": reservation.floor_id,
+                "floor_number": reservation.floor_number,
+                "spot_number": reservation.parking_spot.spot_number,
+                "spot_type": reservation.parking_spot.spot_type,
+                "status": "A",
+                "timestamp": format_iso(now)
+            })
+        except Exception as e:
+            app.logger.warning(f"SSE spot broadcast error: {e}")
     
     msg = "Spot vacated within free grace period (₹0 fee charged)!" if grace_applied else "Parking spot vacated and released successfully"
     return jsonify({
@@ -2163,6 +2253,564 @@ def get_cache_stats():
         "cache_misses": cache.stats['misses'],
         "cached_entries_count": len(cache._cache)
     }), 200
+
+
+# ==================== REAL-TIME LIVE MAP SSE STREAM ====================
+
+@app.route('/api/stream/spots', methods=['GET'])
+def stream_spot_events():
+    """
+    Server-Sent Events (SSE) live stream endpoint for real-time spot transitions.
+    Broadcasts spot_reserved and spot_vacated events so all connected clients
+    instantly update spot colors (Green <-> Red) and floor counters without refreshing.
+    """
+    def event_stream():
+        q = spot_broadcaster.listen()
+        # Initial greeting event
+        yield f"event: connected\ndata: {json.dumps({'status': 'connected', 'timestamp': format_iso(datetime.now(timezone.utc))})}\n\n"
+        try:
+            while True:
+                try:
+                    data = q.get(timeout=25)
+                    yield f"event: spot_update\ndata: {json.dumps(data)}\n\n"
+                except queue.Empty:
+                    # Heartbeat comment to keep HTTP connection alive
+                    yield ": ping\n\n"
+        except GeneratorExit:
+            spot_broadcaster.unlisten(q)
+
+    return Response(
+        event_stream(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+            'Access-Control-Allow-Origin': '*'
+        }
+    )
+
+
+# ==================== MONTHLY SUBSCRIPTIONS & CORPORATE PASSES ====================
+
+@app.route('/api/subscriptions', methods=['GET'])
+@jwt_required()
+def get_user_subscriptions():
+    """Get active and past recurring passes for the authenticated customer"""
+    current_user_id = int(get_jwt_identity())
+    subs = Subscription.query.filter_by(user_id=current_user_id).order_by(Subscription.created_at.desc()).all()
+    
+    # Auto-expire passes that are past end_date
+    now_utc = datetime.now(timezone.utc)
+    updated = False
+    for s in subs:
+        end_utc = s.end_date if s.end_date.tzinfo else s.end_date.replace(tzinfo=timezone.utc)
+        if s.status == 'active' and now_utc > end_utc:
+            s.status = 'expired'
+            updated = True
+    if updated:
+        db.session.commit()
+        
+    return jsonify({
+        "total": len(subs),
+        "subscriptions": [
+            {
+                "id": s.id,
+                "pass_code": s.pass_code,
+                "lot_id": s.lot_id,
+                "lot_name": s.parking_lot.prime_location_name if s.parking_lot else 'Parking Facility',
+                "floor_id": s.floor_id,
+                "floor_name": s.parking_floor.floor_name if s.parking_floor else 'Any Floor',
+                "spot_id": s.spot_id,
+                "spot_number": s.parking_spot.spot_number if s.parking_spot else 'Floating',
+                "pass_type": s.pass_type,
+                "billing_cycle": s.billing_cycle,
+                "price": s.price,
+                "vehicle_plate": s.vehicle_plate,
+                "vehicle_type": s.vehicle_type or 'Car',
+                "status": s.status,
+                "start_date": format_iso(s.start_date),
+                "end_date": format_iso(s.end_date),
+                "created_at": format_iso(s.created_at)
+            }
+            for s in subs
+        ]
+    }), 200
+
+
+@app.route('/api/subscriptions', methods=['POST'])
+@jwt_required()
+def create_subscription():
+    """Customer purchases a monthly / quarterly / annual corporate or commuter pass"""
+    current_user_id = int(get_jwt_identity())
+    user = db.session.get(User, current_user_id)
+    if not user or user.role != 'user':
+        return jsonify({"error": "Only Customer accounts can purchase parking passes."}), 403
+        
+    data = request.get_json() or {}
+    lot_id = data.get('lot_id')
+    if not lot_id:
+        return jsonify({"error": "Parking lot ID is required."}), 400
+        
+    lot = db.session.get(ParkingLot, int(lot_id))
+    if not lot:
+        return jsonify({"error": "Parking facility not found."}), 404
+        
+    pass_type = data.get('pass_type', 'floating').strip().lower()
+    if pass_type not in ['floating', 'dedicated']:
+        pass_type = 'floating'
+        
+    billing_cycle = data.get('billing_cycle', 'monthly').strip().lower()
+    if billing_cycle not in ['monthly', 'quarterly', 'annual']:
+        billing_cycle = 'monthly'
+        
+    vehicle_plate = data.get('vehicle_plate', '').strip().upper()
+    if not vehicle_plate and data.get('vehicle_number'):
+        vehicle_plate = data.get('vehicle_number', '').strip().upper()
+    if not vehicle_plate:
+        return jsonify({"error": "Vehicle license plate number is required."}), 400
+        
+    vehicle_type = data.get('vehicle_type', 'Car')
+    floor_id = data.get('floor_id')
+    spot_id = data.get('spot_id')
+    
+    # Calculate pricing and validity duration
+    now = datetime.now(timezone.utc)
+    base_hourly = lot.price or 40.0
+    # Monthly benchmark: 8 hours/day * 22 working days = 176 hours with a 35% package discount
+    monthly_base = round(base_hourly * 176 * 0.65, 2)
+    if pass_type == 'dedicated':
+        monthly_base = round(monthly_base * 1.30, 2)  # 30% surcharge for dedicated private bay
+        
+    if billing_cycle == 'monthly':
+        pass_price = monthly_base
+        end_date = now + timedelta(days=30)
+    elif billing_cycle == 'quarterly':
+        pass_price = round(monthly_base * 3 * 0.88, 2) # Extra 12% quarterly discount
+        end_date = now + timedelta(days=90)
+    else:  # annual
+        pass_price = round(monthly_base * 12 * 0.75, 2) # Extra 25% annual discount
+        end_date = now + timedelta(days=365)
+        
+    pass_code = f"PASS-{uuid.uuid4().hex[:8].upper()}"
+    
+    sub = Subscription(
+        user_id=current_user_id,
+        lot_id=lot.id,
+        floor_id=int(floor_id) if floor_id else None,
+        spot_id=int(spot_id) if spot_id else None,
+        pass_type=pass_type,
+        billing_cycle=billing_cycle,
+        price=pass_price,
+        start_date=now,
+        end_date=end_date,
+        vehicle_plate=vehicle_plate,
+        vehicle_type=vehicle_type,
+        pass_code=pass_code,
+        status='active'
+    )
+    db.session.add(sub)
+    db.session.commit()
+    
+    return jsonify({
+        "message": f"{billing_cycle.capitalize()} {pass_type.capitalize()} Pass successfully activated!",
+        "subscription": {
+            "id": sub.id,
+            "pass_code": sub.pass_code,
+            "lot_name": lot.prime_location_name,
+            "pass_type": sub.pass_type,
+            "billing_cycle": sub.billing_cycle,
+            "price": sub.price,
+            "vehicle_plate": sub.vehicle_plate,
+            "status": sub.status,
+            "start_date": format_iso(sub.start_date),
+            "end_date": format_iso(sub.end_date)
+        }
+    }), 201
+
+
+@app.route('/api/subscriptions/<int:sub_id>/cancel', methods=['POST'])
+@jwt_required()
+def cancel_subscription(sub_id):
+    """Cancel an active recurring pass"""
+    current_user_id = int(get_jwt_identity())
+    sub = db.session.get(Subscription, sub_id)
+    if not sub:
+        return jsonify({"error": "Pass subscription not found."}), 404
+        
+    user = db.session.get(User, current_user_id)
+    if sub.user_id != current_user_id and user.role != 'admin':
+        return jsonify({"error": "Unauthorized to cancel this pass."}), 403
+        
+    sub.status = 'cancelled'
+    db.session.commit()
+    return jsonify({"message": f"Pass {sub.pass_code} has been cancelled successfully.", "id": sub.id}), 200
+
+
+@app.route('/api/company/subscriptions', methods=['GET'])
+@jwt_required()
+def get_company_subscriptions():
+    """Company operators view subscriptions for their lots"""
+    current_user_id = int(get_jwt_identity())
+    user = db.session.get(User, current_user_id)
+    if not user or user.role != 'company':
+        return jsonify({"error": "Company operator access required."}), 403
+        
+    company_lots = ParkingLot.query.filter_by(company_id=user.id).all()
+    lot_ids = [l.id for l in company_lots]
+    
+    subs = Subscription.query.filter(Subscription.lot_id.in_(lot_ids)).order_by(Subscription.created_at.desc()).all() if lot_ids else []
+    return jsonify({
+        "total": len(subs),
+        "subscriptions": [
+            {
+                "id": s.id,
+                "pass_code": s.pass_code,
+                "customer_name": s.user.name or s.user.username if s.user else 'Customer',
+                "customer_email": s.user.email if s.user else '',
+                "lot_name": s.parking_lot.prime_location_name if s.parking_lot else '',
+                "floor_name": s.parking_floor.floor_name if s.parking_floor else 'Any Floor',
+                "spot_number": s.parking_spot.spot_number if s.parking_spot else 'Floating',
+                "pass_type": s.pass_type,
+                "billing_cycle": s.billing_cycle,
+                "price": s.price,
+                "vehicle_plate": s.vehicle_plate,
+                "vehicle_type": s.vehicle_type or 'Car',
+                "status": s.status,
+                "start_date": format_iso(s.start_date),
+                "end_date": format_iso(s.end_date)
+            }
+            for s in subs
+        ]
+    }), 200
+
+
+@app.route('/api/admin/subscriptions', methods=['GET'])
+@jwt_required()
+def get_admin_subscriptions():
+    """Root admin views all corporate and commuter passes across all facilities"""
+    current_user_id = int(get_jwt_identity())
+    admin = db.session.get(User, current_user_id)
+    if not admin or admin.role != 'admin':
+        return jsonify({"error": "Admin access required."}), 403
+        
+    subs = Subscription.query.order_by(Subscription.created_at.desc()).all()
+    return jsonify({
+        "total": len(subs),
+        "subscriptions": [
+            {
+                "id": s.id,
+                "pass_code": s.pass_code,
+                "customer_name": s.user.name or s.user.username if s.user else 'Customer',
+                "customer_email": s.user.email if s.user else '',
+                "lot_name": s.parking_lot.prime_location_name if s.parking_lot else '',
+                "floor_name": s.parking_floor.floor_name if s.parking_floor else 'Any Floor',
+                "spot_number": s.parking_spot.spot_number if s.parking_spot else 'Floating',
+                "pass_type": s.pass_type,
+                "billing_cycle": s.billing_cycle,
+                "price": s.price,
+                "vehicle_plate": s.vehicle_plate,
+                "vehicle_type": s.vehicle_type or 'Car',
+                "status": s.status,
+                "start_date": format_iso(s.start_date),
+                "end_date": format_iso(s.end_date)
+            }
+            for s in subs
+        ]
+    }), 200
+
+
+# ==================== ANALYTICS & BUSINESS INTELLIGENCE ENGINE ====================
+# Strictly visible to Admin and Company Operators, blocked from standard Customers/Users
+
+def compute_analytics(company_id=None):
+    """
+    Computes business intelligence analytics, multi-floor heatmaps, vehicle dwell times,
+    revenue yields, and vehicle fleet distribution.
+    If company_id is provided, scopes exclusively to lots owned by that company operator.
+    If company_id is None, computes across all parking facilities for root superuser.
+    """
+    if company_id:
+        lots = ParkingLot.query.filter_by(company_id=company_id).all()
+    else:
+        lots = ParkingLot.query.all()
+        
+    lot_ids = [l.id for l in lots]
+
+    if not lot_ids:
+        return jsonify({
+            "summary": {
+                "total_facilities": 0,
+                "total_spots": 0,
+                "available_spots": 0,
+                "occupied_spots": 0,
+                "active_occupancy_rate": 0.0,
+                "total_revenue": 0.0,
+                "total_bookings": 0,
+                "active_bookings": 0,
+                "avg_dwell_time_minutes": 0.0,
+                "avg_dwell_time_formatted": "0m",
+                "vehicle_turnover_rate": 0.0,
+                "peak_rush_hour": "N/A",
+                "busiest_facility": "N/A",
+                "busiest_floor": "N/A"
+            },
+            "hourly_heatmap": [{"hour": h, "label": f"{h:02d}:00", "count": 0, "utilization_pct": 0.0, "is_peak": (8 <= h < 11 or 17 <= h < 20)} for h in range(24)],
+            "floor_analytics": [],
+            "vehicle_breakdown": [],
+            "dwell_time_distribution": [],
+            "revenue_by_mode": {"immediate": 0.0, "scheduled": 0.0, "subscriptions": 0.0}
+        }), 200
+
+    spots = ParkingSpot.query.filter(ParkingSpot.lot_id.in_(lot_ids)).all()
+    total_spots = len(spots)
+    occupied_spots = sum(1 for s in spots if s.status == 'O')
+    available_spots = sum(1 for s in spots if s.status == 'A')
+    active_occupancy_rate = round((occupied_spots / max(total_spots, 1)) * 100, 1)
+
+    all_reservations = Reservation.query.join(ParkingSpot).filter(ParkingSpot.lot_id.in_(lot_ids)).all()
+    completed_reservations = [r for r in all_reservations if r.status == 'completed']
+    active_reservations = [r for r in all_reservations if r.status == 'active']
+
+    parking_revenue = sum(r.parking_cost or 0.0 for r in completed_reservations) + sum(r.parking_cost or 0.0 for r in active_reservations)
+    subscriptions = Subscription.query.filter(Subscription.lot_id.in_(lot_ids)).all()
+    subs_revenue = sum(s.price or 0.0 for s in subscriptions)
+    total_revenue = round(parking_revenue + subs_revenue, 2)
+
+    completed_durations = [r.duration_seconds for r in completed_reservations if r.duration_seconds and r.duration_seconds > 0]
+    avg_dwell_sec = (sum(completed_durations) / len(completed_durations)) if completed_durations else 0
+    avg_dwell_min = round(avg_dwell_sec / 60.0, 1)
+
+    turnover_rate = round(len(completed_reservations) / max(total_spots, 1), 2)
+
+    # Hourly Utilization Heatmap (00:00 to 23:00)
+    hour_counts = [0] * 24
+    for r in all_reservations:
+        if r.parking_timestamp:
+            try:
+                h = r.parking_timestamp.astimezone().hour if r.parking_timestamp.tzinfo else r.parking_timestamp.hour
+                if 0 <= h < 24:
+                    hour_counts[h] += 1
+            except Exception:
+                pass
+
+    max_hour_count = max(hour_counts) if max(hour_counts) > 0 else 1
+    hourly_heatmap = []
+    for h in range(24):
+        cnt = hour_counts[h]
+        util_pct = round((cnt / max_hour_count) * 100, 1)
+        ampm = "AM" if h < 12 else "PM"
+        display_h = 12 if h == 0 or h == 12 else (h if h < 12 else h - 12)
+        next_h = 1 if h == 12 or h == 0 else ((h + 1) if (h + 1) < 12 else (h + 1 - 12))
+        next_ampm = "AM" if (h + 1) < 12 or (h + 1) == 24 else "PM"
+        is_peak = (8 <= h < 11 or 17 <= h < 20)
+        hourly_heatmap.append({
+            "hour": h,
+            "label": f"{display_h} {ampm}",
+            "time_range": f"{display_h}:00 {ampm} - {next_h}:00 {next_ampm}",
+            "count": cnt,
+            "utilization_pct": util_pct,
+            "is_peak": is_peak
+        })
+
+    peak_hour_idx = hour_counts.index(max(hour_counts)) if any(hour_counts) else 9
+    peak_ampm = "AM" if peak_hour_idx < 12 else "PM"
+    peak_disp = 12 if peak_hour_idx in (0, 12) else (peak_hour_idx if peak_hour_idx < 12 else peak_hour_idx - 12)
+    next_disp = 1 if (peak_hour_idx + 1) in (1, 13) else ((peak_hour_idx + 1) if (peak_hour_idx + 1) < 12 else (peak_hour_idx + 1 - 12))
+    peak_rush_label = f"{peak_disp}:00 {peak_ampm} - {next_disp}:00 {'AM' if peak_hour_idx + 1 < 12 else 'PM'}"
+
+    # Multi-Floor Utilization & Yield Breakdown
+    floor_analytics = []
+    floors = ParkingFloor.query.filter(ParkingFloor.lot_id.in_(lot_ids)).order_by(ParkingFloor.floor_number.asc()).all()
+    floor_res_map = {}
+    for r in all_reservations:
+        f_id = r.floor_id or 0
+        floor_res_map[f_id] = floor_res_map.get(f_id, 0) + 1
+
+    busiest_floor_name = "Ground Floor"
+    max_floor_traffic = -1
+
+    for fl in floors:
+        fl_spots = [s for s in spots if s.floor_id == fl.id or (s.floor_number == fl.floor_number and s.lot_id == fl.lot_id)]
+        fl_total = len(fl_spots) or ((fl.regular_spots or 0) + (fl.handicap_spots or 0))
+        fl_occ = sum(1 for s in fl_spots if s.status == 'O')
+        fl_avail = sum(1 for s in fl_spots if s.status == 'A')
+        fl_pct = round((fl_occ / max(fl_total, 1)) * 100, 1)
+        
+        fl_rev = sum(r.parking_cost or 0.0 for r in completed_reservations if (r.floor_id == fl.id or r.floor_number == fl.floor_number))
+        fl_rev_per_spot = round(fl_rev / max(fl_total, 1), 2)
+        
+        traffic = floor_res_map.get(fl.id, 0)
+        if traffic > max_floor_traffic:
+            max_floor_traffic = traffic
+            busiest_floor_name = fl.floor_name
+
+        level = "High" if fl_pct >= 70 else ("Moderate" if fl_pct >= 30 else "Low")
+
+        floor_analytics.append({
+            "lot_id": fl.lot_id,
+            "lot_name": fl.parking_lot.prime_location_name if fl.parking_lot else 'Facility',
+            "floor_id": fl.id,
+            "floor_name": fl.floor_name,
+            "floor_number": fl.floor_number,
+            "total_spots": fl_total,
+            "occupied_spots": fl_occ,
+            "available_spots": fl_avail,
+            "occupancy_rate": fl_pct,
+            "total_revenue": round(fl_rev, 2),
+            "avg_revenue_per_spot": fl_rev_per_spot,
+            "bookings_count": traffic,
+            "utilization_level": level
+        })
+
+    # Vehicle Type Fleet Distribution
+    v_counts = {"Car": 0, "SUV": 0, "EV": 0, "Motorcycle": 0}
+    icons = {"Car": "🚗", "SUV": "🚙", "EV": "⚡", "Motorcycle": "🏍️"}
+    for r in all_reservations:
+        vt = r.vehicle_type or 'Car'
+        if vt in v_counts:
+            v_counts[vt] += 1
+        else:
+            v_counts['Car'] += 1
+
+    total_v = sum(v_counts.values())
+    vehicle_breakdown = [
+        {
+            "type": k,
+            "icon": icons.get(k, "🚗"),
+            "count": v,
+            "percentage": round((v / max(total_v, 1)) * 100, 1)
+        }
+        for k, v in v_counts.items()
+    ]
+
+    # Dwell Time Distribution
+    brackets = {
+        "< 1h (Quick Stop)": 0,
+        "1 - 3h (Short Stay)": 0,
+        "3 - 6h (Medium Stay)": 0,
+        "6 - 12h (Workday)": 0,
+        "12 - 24h (Full Day)": 0,
+        "> 24h (Extended)": 0
+    }
+    for secs in completed_durations:
+        hrs = secs / 3600.0
+        if hrs < 1:
+            brackets["< 1h (Quick Stop)"] += 1
+        elif hrs < 3:
+            brackets["1 - 3h (Short Stay)"] += 1
+        elif hrs < 6:
+            brackets["3 - 6h (Medium Stay)"] += 1
+        elif hrs < 12:
+            brackets["6 - 12h (Workday)"] += 1
+        elif hrs < 24:
+            brackets["12 - 24h (Full Day)"] += 1
+        else:
+            brackets["> 24h (Extended)"] += 1
+
+    total_d = len(completed_durations)
+    dwell_time_distribution = [
+        {
+            "bracket": k,
+            "count": v,
+            "percentage": round((v / max(total_d, 1)) * 100, 1)
+        }
+        for k, v in brackets.items()
+    ]
+
+    # Revenue by Mode
+    imm_rev = sum(r.parking_cost or 0.0 for r in completed_reservations if r.booking_type != 'scheduled')
+    sched_rev = sum(r.parking_cost or 0.0 for r in completed_reservations if r.booking_type == 'scheduled')
+    revenue_by_mode = {
+        "immediate": round(imm_rev, 2),
+        "scheduled": round(sched_rev, 2),
+        "subscriptions": round(subs_revenue, 2)
+    }
+
+    # Busiest facility
+    lot_traffic = {}
+    for r in all_reservations:
+        name = r.venue_name or (r.parking_spot.parking_lot.prime_location_name if r.parking_spot and r.parking_spot.parking_lot else 'Facility')
+        lot_traffic[name] = lot_traffic.get(name, 0) + 1
+    busiest_lot_name = max(lot_traffic, key=lot_traffic.get) if lot_traffic else (lots[0].prime_location_name if lots else 'N/A')
+
+    return jsonify({
+        "summary": {
+            "total_facilities": len(lots),
+            "total_spots": total_spots,
+            "available_spots": available_spots,
+            "occupied_spots": occupied_spots,
+            "active_occupancy_rate": active_occupancy_rate,
+            "total_revenue": total_revenue,
+            "total_bookings": len(all_reservations),
+            "active_bookings": len(active_reservations),
+            "avg_dwell_time_minutes": avg_dwell_min,
+            "avg_dwell_time_formatted": format_duration(avg_dwell_sec),
+            "vehicle_turnover_rate": turnover_rate,
+            "peak_rush_hour": peak_rush_label,
+            "busiest_facility": busiest_lot_name,
+            "busiest_floor": busiest_floor_name
+        },
+        "hourly_heatmap": hourly_heatmap,
+        "floor_analytics": floor_analytics,
+        "vehicle_breakdown": vehicle_breakdown,
+        "dwell_time_distribution": dwell_time_distribution,
+        "revenue_by_mode": revenue_by_mode
+    }), 200
+
+
+@app.route('/api/admin/analytics', methods=['GET'])
+@jwt_required()
+def get_admin_analytics():
+    """
+    Platform-wide Business Intelligence & Analytics.
+    Accessible exclusively to Superuser Root Admin. Blocked from Customers/Users.
+    """
+    current_user_id = int(get_jwt_identity())
+    admin = db.session.get(User, current_user_id)
+    if not admin or admin.role != 'admin':
+        return jsonify({
+            "error": "Access denied. Business Intelligence and Analytics are strictly restricted to Admin and Company Operators."
+        }), 403
+    return compute_analytics(company_id=None)
+
+
+@app.route('/api/company/analytics', methods=['GET'])
+@jwt_required()
+def get_company_analytics():
+    """
+    Facility-specific Business Intelligence & Analytics.
+    Accessible exclusively to Company Operators. Blocked from Customers/Users.
+    """
+    current_user_id = int(get_jwt_identity())
+    user = db.session.get(User, current_user_id)
+    if not user or user.role != 'company':
+        return jsonify({
+            "error": "Access denied. Business Intelligence and Analytics are strictly restricted to Admin and Company Operators."
+        }), 403
+    return compute_analytics(company_id=user.id)
+
+
+@app.route('/api/analytics', methods=['GET'])
+@jwt_required()
+def get_general_analytics():
+    """
+    Universal analytics route that dispatches based on role:
+    Admin gets platform analytics, Company gets facility analytics,
+    Customer gets HTTP 403 Forbidden.
+    """
+    current_user_id = int(get_jwt_identity())
+    user = db.session.get(User, current_user_id)
+    if not user:
+        return jsonify({"error": "User not found."}), 404
+    if user.role == 'admin':
+        return compute_analytics(company_id=None)
+    elif user.role == 'company':
+        return compute_analytics(company_id=user.id)
+    else:
+        return jsonify({
+            "error": "Access denied. Business Intelligence and Analytics are strictly restricted to Admin and Company Operators."
+        }), 403
 
 
 # ==================== MAIN ====================

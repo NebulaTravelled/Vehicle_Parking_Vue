@@ -250,6 +250,44 @@ class ExportJob(db.Model):
     completed_at = db.Column(db.DateTime, nullable=True)
 
 
+class Subscription(db.Model):
+    """
+    Monthly / Corporate Pass model.
+    Enables regular commuters, enterprise fleets or building tenants to purchase
+    dedicated or floating recurring passes.
+    """
+    __tablename__ = 'subscriptions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    lot_id = db.Column(db.Integer, db.ForeignKey('parking_lots.id'), nullable=False)
+    floor_id = db.Column(db.Integer, db.ForeignKey('parking_floors.id'), nullable=True)
+    spot_id = db.Column(db.Integer, db.ForeignKey('parking_spots.id'), nullable=True)
+    
+    pass_type = db.Column(db.String(20), default='floating', nullable=False)      # 'floating' or 'dedicated'
+    billing_cycle = db.Column(db.String(20), default='monthly', nullable=False)   # 'monthly', 'quarterly', 'annual'
+    price = db.Column(db.Float, default=0.0, nullable=False)
+    
+    start_date = db.Column(db.DateTime, default=utc_now, nullable=False)
+    end_date = db.Column(db.DateTime, nullable=False)
+    
+    vehicle_plate = db.Column(db.String(30), nullable=False)
+    vehicle_type = db.Column(db.String(30), default='Car', nullable=True)
+    pass_code = db.Column(db.String(40), unique=True, nullable=False)             # e.g., 'PASS-ABC12345'
+    status = db.Column(db.String(20), default='active', nullable=False)           # 'active', 'expired', 'cancelled'
+    
+    created_at = db.Column(db.DateTime, default=utc_now)
+    
+    # Relationships
+    user = db.relationship('User', backref=db.backref('subscriptions', lazy=True))
+    parking_lot = db.relationship('ParkingLot', backref=db.backref('subscriptions', lazy=True))
+    parking_floor = db.relationship('ParkingFloor', backref=db.backref('subscriptions', lazy=True))
+    parking_spot = db.relationship('ParkingSpot', backref=db.backref('subscriptions', lazy=True))
+    
+    def __repr__(self):
+        return f'<Subscription {self.pass_code} ({self.pass_type}, User {self.user_id}, Status {self.status})>'
+
+
 class DailyReminderLog(db.Model):
     """Daily reminders audit log"""
     __tablename__ = 'daily_reminder_logs'

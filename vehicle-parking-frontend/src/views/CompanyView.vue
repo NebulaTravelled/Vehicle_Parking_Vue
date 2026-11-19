@@ -34,6 +34,41 @@
         </div>
       </nav>
 
+      <!-- Company Portal Navigation Tab Bar -->
+      <div class="bg-white border-bottom px-4 shadow-xs">
+        <div class="max-w-1400">
+          <ul class="nav nav-tabs border-0 pt-2">
+            <li class="nav-item">
+              <button
+                class="nav-link"
+                :class="{ active: activeTab === 'facilities' }"
+                @click="activeTab = 'facilities'"
+              >
+                🅿️ Facilities & Grid Management
+              </button>
+            </li>
+            <li class="nav-item">
+              <button
+                class="nav-link"
+                :class="{ active: activeTab === 'analytics' }"
+                @click="activeTab = 'analytics'"
+              >
+                📈 Facility Analytics & Heatmaps
+              </button>
+            </li>
+            <li class="nav-item">
+              <button
+                class="nav-link"
+                :class="{ active: activeTab === 'subscriptions' }"
+                @click="activeTab = 'subscriptions'"
+              >
+                🎟️ Subscriptions & Passes
+              </button>
+            </li>
+          </ul>
+        </div>
+      </div>
+
       <!-- Main Container -->
       <div class="container-fluid p-4 max-w-1400">
         <!-- Global Feedback Alert -->
@@ -42,6 +77,9 @@
           {{ alertMessage }}
           <button type="button" class="btn-close" @click="alertMessage = ''"></button>
         </div>
+
+        <!-- ==================== TAB 1: FACILITIES & GRID MANAGEMENT ==================== -->
+        <div v-if="activeTab === 'facilities'">
 
         <!-- Dashboard Header & Top Stats -->
         <div class="row g-3 mb-4">
@@ -219,6 +257,301 @@
                 </div>
 
               </div>
+            </div>
+          </div>
+        </div>
+
+        </div>
+
+        <!-- ==================== TAB 2: FACILITY ANALYTICS & HEATMAPS ==================== -->
+        <div v-if="activeTab === 'analytics'">
+          <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body p-4">
+              <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                <div>
+                  <h4 class="fw-bold mb-1 text-dark d-flex align-items-center gap-2">
+                    <span>📈 Facility Utilization & Business Analytics</span>
+                    <span class="badge bg-primary fs-6">{{ companyUser.company_name || 'Operator' }} Scope</span>
+                  </h4>
+                  <p class="text-muted small mb-0">Multi-deck floor yield, hourly arrival rush patterns, vehicle dwell time and turnover for your facilities.</p>
+                </div>
+                <div class="d-flex gap-2">
+                  <span class="badge bg-success-subtle text-success border border-success-subtle d-flex align-items-center px-3">
+                    🟢 Live Event Stream Active
+                  </span>
+                  <button class="btn btn-outline-primary btn-sm fw-semibold" @click="fetchAnalytics" :disabled="analyticsLoading">
+                    {{ analyticsLoading ? 'Refreshing Metrics...' : '🔄 Refresh Analytics' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Top KPI Summary Cards -->
+              <div v-if="analyticsData?.summary" class="row g-3 mb-4">
+                <div class="col-lg-2 col-md-4 col-sm-6">
+                  <div class="card bg-light border-0 p-3 h-100 rounded-3">
+                    <span class="text-muted small fw-semibold text-uppercase">Total Earned</span>
+                    <h3 class="fw-bold text-success mb-1 mt-1">₹{{ (analyticsData.summary.total_revenue || 0).toFixed(2) }}</h3>
+                    <small class="text-muted">{{ analyticsData.summary.total_bookings }} total bookings</small>
+                  </div>
+                </div>
+                <div class="col-lg-2 col-md-4 col-sm-6">
+                  <div class="card bg-light border-0 p-3 h-100 rounded-3">
+                    <span class="text-muted small fw-semibold text-uppercase">Live Occupancy</span>
+                    <h3 class="fw-bold text-primary mb-1 mt-1">{{ analyticsData.summary.active_occupancy_rate }}%</h3>
+                    <small class="text-muted">{{ analyticsData.summary.occupied_spots }} / {{ analyticsData.summary.total_spots }} slots occupied</small>
+                  </div>
+                </div>
+                <div class="col-lg-2 col-md-4 col-sm-6">
+                  <div class="card bg-light border-0 p-3 h-100 rounded-3">
+                    <span class="text-muted small fw-semibold text-uppercase">Average Stay</span>
+                    <h3 class="fw-bold text-dark mb-1 mt-1">{{ analyticsData.summary.avg_dwell_time_formatted || '0m' }}</h3>
+                    <small class="text-muted">{{ analyticsData.summary.avg_dwell_time_minutes }}m average dwell time</small>
+                  </div>
+                </div>
+                <div class="col-lg-2 col-md-4 col-sm-6">
+                  <div class="card bg-light border-0 p-3 h-100 rounded-3">
+                    <span class="text-muted small fw-semibold text-uppercase">Turnover Ratio</span>
+                    <h3 class="fw-bold text-info mb-1 mt-1">{{ analyticsData.summary.vehicle_turnover_rate }}x</h3>
+                    <small class="text-muted">Vehicle turnover frequency</small>
+                  </div>
+                </div>
+                <div class="col-lg-2 col-md-4 col-sm-6">
+                  <div class="card bg-light border-0 p-3 h-100 rounded-3">
+                    <span class="text-muted small fw-semibold text-uppercase">Busiest Hour</span>
+                    <h5 class="fw-bold text-warning-emphasis mb-1 mt-2">⚡ {{ analyticsData.summary.peak_rush_hour || '8 - 11 AM' }}</h5>
+                    <small class="text-muted">Peak rush period</small>
+                  </div>
+                </div>
+                <div class="col-lg-2 col-md-4 col-sm-6">
+                  <div class="card bg-light border-0 p-3 h-100 rounded-3">
+                    <span class="text-muted small fw-semibold text-uppercase">Top Floor</span>
+                    <h5 class="fw-bold text-primary mb-1 mt-2">🏢 {{ analyticsData.summary.busiest_floor || 'Ground Floor' }}</h5>
+                    <small class="text-muted">Highest occupancy floor</small>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 24-Hour Utilization Heatmap -->
+              <div class="card border mb-4 rounded-3 overflow-hidden shadow-sm">
+                <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
+                  <h6 class="fw-bold mb-0 text-dark">
+                    <span>🔥 24-Hour Utilization & Arrival Heatmap (00:00 – 23:00)</span>
+                  </h6>
+                  <div class="small text-muted d-flex align-items-center gap-2">
+                    <span class="badge bg-warning text-dark">⚡ Peak Hours (8-11 AM, 5-8 PM)</span>
+                    <span class="badge bg-primary text-white">Intensity: 0% → 100%</span>
+                  </div>
+                </div>
+                <div class="card-body p-3">
+                  <div class="row g-1 text-center">
+                    <div 
+                      v-for="h in analyticsData?.hourly_heatmap || []" 
+                      :key="'comp-heat-' + h.hour" 
+                      class="col-12 col-sm-6 col-md-3 col-xl"
+                    >
+                      <div 
+                        class="p-2 rounded-2 border transition-card h-100"
+                        :class="h.is_peak ? 'border-warning bg-warning-subtle' : 'bg-light'"
+                        :title="`${h.time_range}: ${h.count} arrivals (${h.utilization_pct}%)`"
+                      >
+                        <div class="fw-bold small text-dark">{{ h.label }}</div>
+                        <div class="fs-6 fw-bold my-1 text-primary">{{ h.count }}</div>
+                        <div class="progress" style="height: 6px;">
+                          <div 
+                            class="progress-bar" 
+                            :class="h.is_peak ? 'bg-warning' : (h.utilization_pct > 60 ? 'bg-danger' : 'bg-success')" 
+                            :style="{ width: `${Math.max(h.utilization_pct, 5)}%` }"
+                          ></div>
+                        </div>
+                        <div class="x-small text-muted mt-1">{{ h.utilization_pct }}%</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Multi-Floor Yield Table & Fleet / Dwell Brackets -->
+              <div class="row g-4">
+                <div class="col-lg-7">
+                  <div class="card border shadow-sm rounded-3 h-100">
+                    <div class="card-header bg-white border-bottom p-3">
+                      <h6 class="fw-bold mb-0 text-dark">🏢 Facility Decks Yield & Occupancy Breakdown</h6>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="table table-hover align-middle mb-0 small">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Facility & Deck</th>
+                            <th>Total Slots</th>
+                            <th>Occupied</th>
+                            <th>Occupancy %</th>
+                            <th>Revenue</th>
+                            <th>Yield / Spot</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="fl in analyticsData?.floor_analytics || []" :key="'comp-fl-an-' + fl.floor_id">
+                            <td>
+                              <div class="fw-bold text-dark">{{ fl.lot_name }}</div>
+                              <div class="text-muted x-small">🏢 {{ fl.floor_name }} (L{{ fl.floor_number }})</div>
+                            </td>
+                            <td>{{ fl.total_spots }}</td>
+                            <td><span class="text-danger fw-bold">{{ fl.occupied_spots }}</span> / {{ fl.total_spots }}</td>
+                            <td>
+                              <div class="d-flex align-items-center gap-1">
+                                <span class="fw-semibold">{{ fl.occupancy_rate }}%</span>
+                                <div class="progress flex-grow-1" style="height: 5px; min-width: 40px;">
+                                  <div 
+                                    class="progress-bar"
+                                    :class="fl.occupancy_rate >= 70 ? 'bg-danger' : (fl.occupancy_rate >= 30 ? 'bg-warning' : 'bg-success')"
+                                    :style="{ width: `${fl.occupancy_rate}%` }"
+                                  ></div>
+                                </div>
+                              </div>
+                            </td>
+                            <td class="fw-bold text-success">₹{{ (fl.total_revenue || 0).toFixed(2) }}</td>
+                            <td class="text-muted">₹{{ fl.avg_revenue_per_spot }}</td>
+                            <td>
+                              <span 
+                                class="badge"
+                                :class="fl.utilization_level === 'High' ? 'bg-danger' : (fl.utilization_level === 'Moderate' ? 'bg-warning text-dark' : 'bg-success')"
+                              >
+                                {{ fl.utilization_level }}
+                              </span>
+                            </td>
+                          </tr>
+                          <tr v-if="!analyticsData?.floor_analytics?.length">
+                            <td colspan="7" class="text-center py-3 text-muted">No floor metrics available.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-lg-5">
+                  <div class="card border shadow-sm rounded-3 mb-3">
+                    <div class="card-header bg-white border-bottom p-3">
+                      <h6 class="fw-bold mb-0 text-dark">🚗 Vehicle Fleet Distribution</h6>
+                    </div>
+                    <div class="card-body p-3">
+                      <div v-for="v in analyticsData?.vehicle_breakdown || []" :key="'comp-v-br-' + v.type" class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center small mb-1">
+                          <span class="fw-semibold">{{ v.icon }} {{ v.type }}</span>
+                          <span class="text-muted">{{ v.count }} bookings ({{ v.percentage }}%)</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                          <div 
+                            class="progress-bar" 
+                            :class="v.type === 'EV' ? 'bg-success' : (v.type === 'SUV' ? 'bg-primary' : 'bg-info')"
+                            :style="{ width: `${v.percentage}%` }"
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="card border shadow-sm rounded-3">
+                    <div class="card-header bg-white border-bottom p-3">
+                      <h6 class="fw-bold mb-0 text-dark">⏱️ Vehicle Dwell Time Turnover</h6>
+                    </div>
+                    <div class="card-body p-3">
+                      <div v-for="d in analyticsData?.dwell_time_distribution || []" :key="'comp-dw-' + d.bracket" class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center small mb-1">
+                          <span class="text-dark">{{ d.bracket }}</span>
+                          <span class="text-muted">{{ d.count }} sessions ({{ d.percentage }}%)</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                          <div 
+                            class="progress-bar bg-secondary"
+                            :style="{ width: `${d.percentage}%` }"
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== TAB 3: SUBSCRIPTIONS & CORPORATE PASSES ==================== -->
+        <div v-if="activeTab === 'subscriptions'">
+          <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body p-4">
+              <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div>
+                  <h4 class="fw-bold mb-1 text-dark">🎟️ Facility Passes & Subscriptions</h4>
+                  <p class="text-muted small mb-0">Active corporate and recurring commuter passes registered for your parking spaces.</p>
+                </div>
+                <button class="btn btn-outline-primary btn-sm" @click="fetchSubscriptions" :disabled="subscriptionsLoading">
+                  {{ subscriptionsLoading ? 'Refreshing...' : '🔄 Refresh Passes' }}
+                </button>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Pass Code</th>
+                      <th>Customer</th>
+                      <th>Facility & Deck</th>
+                      <th>Slot Allocation</th>
+                      <th>Pass Type</th>
+                      <th>Billing Cycle</th>
+                      <th>Vehicle Plate</th>
+                      <th>Fee</th>
+                      <th>Validity Period</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="sub in subscriptions" :key="sub.id">
+                      <td><span class="badge bg-dark font-monospace">{{ sub.pass_code }}</span></td>
+                      <td>
+                        <div class="fw-semibold text-dark">{{ sub.customer_name }}</div>
+                        <div class="text-muted x-small">{{ sub.customer_email }}</div>
+                      </td>
+                      <td>
+                        <div class="fw-semibold text-primary">{{ sub.lot_name }}</div>
+                        <div class="text-muted x-small">🏢 {{ sub.floor_name }}</div>
+                      </td>
+                      <td>
+                        <span class="badge bg-light text-secondary border font-monospace">
+                          {{ sub.spot_number || 'Floating' }}
+                        </span>
+                      </td>
+                      <td>
+                        <span class="badge" :class="sub.pass_type === 'dedicated' ? 'bg-primary' : 'bg-secondary'">
+                          {{ sub.pass_type === 'dedicated' ? '⭐ Dedicated' : '🔄 Floating' }}
+                        </span>
+                      </td>
+                      <td class="text-capitalize">{{ sub.billing_cycle }}</td>
+                      <td><span class="font-monospace fw-bold">{{ sub.vehicle_plate }}</span></td>
+                      <td class="fw-bold text-success">₹{{ sub.price }}</td>
+                      <td class="small">
+                        <div>{{ new Date(sub.start_date).toLocaleDateString() }} ➔</div>
+                        <div>{{ new Date(sub.end_date).toLocaleDateString() }}</div>
+                      </td>
+                      <td>
+                        <span 
+                          class="badge"
+                          :class="sub.status === 'active' ? 'bg-success' : (sub.status === 'expired' ? 'bg-secondary' : 'bg-danger')"
+                        >
+                          {{ sub.status }}
+                        </span>
+                      </td>
+                    </tr>
+                    <tr v-if="subscriptions.length === 0">
+                      <td colspan="10" class="text-center py-4 text-muted">No commuter passes or corporate subscriptions registered for your facilities yet.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
             </div>
           </div>
         </div>
@@ -870,6 +1203,13 @@ export default {
       activeTool: 'parking', // 'parking', 'handicap', 'ramp_up', 'ramp_down', 'elevator', 'stairs', 'road', 'empty'
       activeFloorIdx: 0,
       previewFloorIndex: {},
+      activeTab: 'facilities', // 'facilities', 'analytics', 'subscriptions'
+      analyticsData: null,
+      analyticsLoading: false,
+      subscriptions: [],
+      subscriptionsLoading: false,
+      eventSource: null,
+      realtimePulsingSpots: {},
       editSlotForm: {
         prime_location_name: '',
         price: 0,
@@ -970,11 +1310,23 @@ export default {
       return total
     }
   },
+  watch: {
+    activeTab(newTab) {
+      if (!this.isLoggedIn) return
+      if (newTab === 'facilities') this.fetchDashboard()
+      if (newTab === 'analytics') this.fetchAnalytics()
+      if (newTab === 'subscriptions') this.fetchSubscriptions()
+    }
+  },
   mounted() {
     if (this.isLoggedIn) {
       this.fetchDashboard()
       this.fetchProfile()
+      this.initLiveStream()
     }
+  },
+  beforeUnmount() {
+    this.closeLiveStream()
   },
   methods: {
     getAuthHeaders() {
@@ -1313,6 +1665,98 @@ export default {
       } finally {
         this.savingSlots = false
       }
+    },
+    async fetchAnalytics() {
+      this.analyticsLoading = true
+      try {
+        const res = await axios.get('http://localhost:5000/api/company/analytics', this.getAuthHeaders())
+        this.analyticsData = res.data
+      } catch (err) {
+        this.showAlert(err.response?.data?.error || 'Failed to load facility analytics', 'danger')
+      } finally {
+        this.analyticsLoading = false
+      }
+    },
+    async fetchSubscriptions() {
+      this.subscriptionsLoading = true
+      try {
+        const res = await axios.get('http://localhost:5000/api/company/subscriptions', this.getAuthHeaders())
+        this.subscriptions = res.data.subscriptions || []
+      } catch (err) {
+        this.showAlert(err.response?.data?.error || 'Failed to load subscriptions', 'danger')
+      } finally {
+        this.subscriptionsLoading = false
+      }
+    },
+    initLiveStream() {
+      if (this.eventSource) this.closeLiveStream()
+      try {
+        this.eventSource = new EventSource('http://localhost:5000/api/stream/spots')
+        this.eventSource.addEventListener('spot_update', (e) => {
+          try {
+            const data = JSON.parse(e.data)
+            this.handleRealtimeSpotUpdate(data)
+          } catch (err) {
+            console.error('SSE spot update error:', err)
+          }
+        })
+      } catch (err) {
+        console.error('SSE stream error:', err)
+      }
+    },
+    closeLiveStream() {
+      if (this.eventSource) {
+        this.eventSource.close()
+        this.eventSource = null
+      }
+    },
+    handleRealtimeSpotUpdate(data) {
+      const spotId = data.spot_id
+      const newStatus = data.status
+      if (!spotId) return
+
+      this.realtimePulsingSpots = { ...this.realtimePulsingSpots, [spotId]: true }
+      setTimeout(() => {
+        const copy = { ...this.realtimePulsingSpots }
+        delete copy[spotId]
+        this.realtimePulsingSpots = copy
+      }, 1800)
+
+      for (const lot of this.lots) {
+        if (lot.id === data.lot_id) {
+          if (newStatus === 'O') {
+            lot.available_spots = Math.max(0, (lot.available_spots || 1) - 1)
+            lot.occupied_spots = (lot.occupied_spots || 0) + 1
+          } else if (newStatus === 'A') {
+            lot.available_spots = (lot.available_spots || 0) + 1
+            lot.occupied_spots = Math.max(0, (lot.occupied_spots || 1) - 1)
+          }
+          if (lot.spots) {
+            for (const sp of lot.spots) {
+              if (sp.id === spotId) sp.status = newStatus
+            }
+          }
+          if (lot.floors) {
+            for (const fl of lot.floors) {
+              if (fl.spots) {
+                for (const sp of fl.spots) {
+                  if (sp.id === spotId) sp.status = newStatus
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (this.activeTab === 'analytics' && this.analyticsData?.summary) {
+        if (newStatus === 'O') {
+          this.analyticsData.summary.occupied_spots = (this.analyticsData.summary.occupied_spots || 0) + 1
+          this.analyticsData.summary.available_spots = Math.max(0, (this.analyticsData.summary.available_spots || 1) - 1)
+        } else if (newStatus === 'A') {
+          this.analyticsData.summary.occupied_spots = Math.max(0, (this.analyticsData.summary.occupied_spots || 1) - 1)
+          this.analyticsData.summary.available_spots = (this.analyticsData.summary.available_spots || 0) + 1
+        }
+      }
     }
   }
 }
@@ -1458,6 +1902,18 @@ export default {
 .mini-cell {
   height: 12px;
   border-radius: 2px;
+}
+
+/* Real-time SSE Pulse Animation */
+@keyframes spot-pulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.7); }
+  50% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(13, 110, 253, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(13, 110, 253, 0); }
+}
+
+.pulse-live {
+  animation: spot-pulse 1.2s ease-out;
+  z-index: 10;
 }
 </style>
 

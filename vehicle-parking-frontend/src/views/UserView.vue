@@ -67,6 +67,15 @@
               📊 Monthly Activity Report
             </button>
           </li>
+          <li class="nav-item">
+            <button
+              class="nav-link"
+              :class="{ active: activeTab === 'subscriptions' }"
+              @click="activeTab = 'subscriptions'"
+            >
+              🎟️ My Passes & Subscriptions <span v-if="subscriptions.length" class="badge bg-primary ms-1">{{ subscriptions.length }}</span>
+            </button>
+          </li>
         </ul>
       </div>
 
@@ -158,22 +167,87 @@
           </div>
 
           <!-- Section: Available Parking Lots for 4-Wheeler Booking -->
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <div>
-              <h4 class="fw-bold mb-1">Available Parking Lots</h4>
-              <p class="text-muted small mb-0">Choose a parking lot. Customers can reserve multiple spots simultaneously for families or fleets.</p>
+          <!-- Section: Available Parking Lots for 4-Wheeler Booking -->
+          <div class="card shadow-sm border-0 mb-4 rounded-4 overflow-hidden">
+            <div class="card-body p-4">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <div>
+                  <h4 class="fw-bold mb-1 text-dark d-flex align-items-center gap-2">
+                    <span>🅿️ Available Parking Slots</span>
+                    <span class="badge bg-primary fs-6">{{ filteredLots.length }} Available Locations</span>
+                  </h4>
+                  <p class="text-muted small mb-0">Search and reserve parking spots by facility name, address, or PIN code.</p>
+                </div>
+                <button class="btn btn-outline-success btn-sm" @click="fetchLots('')">🔄 Refresh Lots</button>
+              </div>
+
+              <!-- Search Bar for Name, Address, Pincode -->
+              <div class="row g-2 align-items-center">
+                <div class="col-md-8 col-lg-9">
+                  <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0 text-muted">
+                      🔍
+                    </span>
+                    <input
+                      v-model="lotSearchQuery"
+                      type="text"
+                      class="form-control border-start-0 ps-0"
+                      placeholder="Search parking slots by name, address, or pincode (e.g. Grand Central, MG Road, 110001)..."
+                      @keydown.esc="lotSearchQuery = ''"
+                    />
+                    <button
+                      v-if="lotSearchQuery"
+                      class="btn btn-outline-secondary border-start-0"
+                      type="button"
+                      @click="lotSearchQuery = ''"
+                      title="Clear search"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <div class="col-md-4 col-lg-3 text-md-end">
+                  <span class="badge bg-light text-secondary border p-2 w-100 text-center fw-normal">
+                    Showing <strong>{{ filteredLots.length }}</strong> of {{ lots.length }} Facilities
+                  </span>
+                </div>
+              </div>
+
+              <!-- Active Search Filter Indicator -->
+              <div v-if="lotSearchQuery.trim()" class="mt-2.5 small d-flex align-items-center gap-2 text-muted">
+                <span>Active search filter:</span>
+                <span class="badge bg-primary-subtle text-primary border font-monospace">"{{ lotSearchQuery.trim() }}"</span>
+                <button class="btn btn-link btn-xs text-danger p-0 ms-1 text-decoration-none" @click="lotSearchQuery = ''">Clear filter</button>
+              </div>
             </div>
-            <button class="btn btn-outline-success btn-sm" @click="fetchLots">🔄 Refresh Lots</button>
           </div>
 
-          <div v-if="lots.length === 0" class="card text-center py-5 shadow-sm">
+          <!-- Empty State: No Lots in System -->
+          <div v-if="lots.length === 0" class="card text-center py-5 shadow-sm border-0 rounded-4">
             <div class="card-body">
-              <h5 class="text-muted">No parking lots currently available.</h5>
+              <div class="fs-1 text-muted mb-2">🅿️</div>
+              <h5 class="fw-bold text-muted">No parking lots currently available.</h5>
+              <p class="text-muted small">Please check back later or contact the administrator.</p>
             </div>
           </div>
 
-          <div class="row g-4">
-            <div v-for="lot in lots" :key="lot.id" class="col-md-6 col-lg-4">
+          <!-- Empty State: Search Query Yields 0 Results -->
+          <div v-else-if="filteredLots.length === 0" class="card text-center py-5 shadow-sm border-0 rounded-4 mb-4">
+            <div class="card-body">
+              <div class="fs-1 mb-2">🔍</div>
+              <h5 class="fw-bold text-dark">No matching parking slots found</h5>
+              <p class="text-muted small mb-3">
+                No facilities or slots matched your search for "<strong>{{ lotSearchQuery }}</strong>".<br>
+                Try searching by a different name, street address, or 6-digit postal pincode.
+              </p>
+              <button class="btn btn-primary btn-sm fw-semibold" @click="lotSearchQuery = ''">
+                ✕ Clear Search Filter
+              </button>
+            </div>
+          </div>
+
+          <div v-else class="row g-4">
+            <div v-for="lot in filteredLots" :key="lot.id" class="col-md-6 col-lg-4">
               <div class="card shadow-sm h-100 border-0 rounded-3">
                 <div class="card-body d-flex flex-column p-4">
                   <div class="d-flex justify-content-between align-items-start mb-2">
@@ -518,6 +592,100 @@
           </div>
         </div>
 
+        <!-- ==================== TAB 5: MY PASSES & SUBSCRIPTIONS ==================== -->
+        <div v-if="activeTab === 'subscriptions'">
+          <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body p-4">
+              <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div>
+                  <h4 class="fw-bold mb-1 text-dark d-flex align-items-center gap-2">
+                    <span>🎟️ My Commuter & Corporate Passes</span>
+                    <span class="badge bg-primary fs-6">{{ subscriptions.length }} Passes</span>
+                  </h4>
+                  <p class="text-muted small mb-0">Long-term recurring passes for hassle-free daily parking without repeated payments.</p>
+                </div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-outline-primary btn-sm" @click="fetchSubscriptions" :disabled="subscriptionsLoading">
+                    {{ subscriptionsLoading ? 'Refreshing...' : '🔄 Refresh' }}
+                  </button>
+                  <button class="btn btn-success btn-sm fw-semibold shadow-sm" @click="openBuyPassModal">
+                    ➕ Buy Commuter Pass
+                  </button>
+                </div>
+              </div>
+
+              <!-- Passes Grid -->
+              <div v-if="subscriptions.length === 0" class="text-center py-5 bg-light rounded-4 border">
+                <div class="fs-1 mb-2">🎟️</div>
+                <h5 class="fw-bold text-dark">No active parking passes</h5>
+                <p class="text-muted small mb-3">Save up to 35% with Monthly, Quarterly, or Annual corporate & commuter passes.</p>
+                <button class="btn btn-primary btn-sm fw-semibold" @click="openBuyPassModal">
+                  ➕ Buy Your First Commuter Pass
+                </button>
+              </div>
+
+              <div v-else class="row g-3">
+                <div v-for="sub in subscriptions" :key="'pass-' + sub.id" class="col-md-6 col-lg-4">
+                  <div 
+                    class="card h-100 border transition-card shadow-sm rounded-3 overflow-hidden"
+                    :class="sub.status === 'active' ? 'border-primary border-2 bg-primary-subtle bg-opacity-10' : 'border-light-subtle bg-white'"
+                  >
+                    <div class="card-body p-3 d-flex flex-column justify-content-between">
+                      <div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                          <span class="badge" :class="sub.pass_type === 'dedicated' ? 'bg-primary' : 'bg-secondary'">
+                            {{ sub.pass_type === 'dedicated' ? '⭐ Dedicated Pass' : '🔄 Floating Pass' }}
+                          </span>
+                          <span 
+                            class="badge" 
+                            :class="sub.status === 'active' ? 'bg-success' : (sub.status === 'expired' ? 'bg-secondary' : 'bg-danger')"
+                          >
+                            {{ sub.status === 'active' ? '🟢 Active' : (sub.status === 'expired' ? '⚪ Expired' : '🔴 Cancelled') }}
+                          </span>
+                        </div>
+
+                        <div class="bg-dark text-white p-2 rounded-2 text-center font-monospace fw-bold mb-3 fs-6">
+                          🎟️ {{ sub.pass_code }}
+                        </div>
+
+                        <h5 class="fw-bold text-dark mb-1">{{ sub.lot_name }}</h5>
+                        <div class="text-muted small mb-2">🏢 Deck: {{ sub.floor_name }} <span v-if="sub.spot_number !== 'Floating'">• Spot: <strong>{{ sub.spot_number }}</strong></span></div>
+
+                        <div class="bg-light p-2.5 rounded-2 small border mb-2">
+                          <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Vehicle Plate:</span>
+                            <strong class="font-monospace">{{ sub.vehicle_plate }}</strong>
+                          </div>
+                          <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Plan:</span>
+                            <span class="text-capitalize fw-semibold">{{ sub.billing_cycle }} (₹{{ sub.price }})</span>
+                          </div>
+                          <div class="d-flex justify-content-between border-top pt-1 mt-1 text-primary">
+                            <span>Valid Until:</span>
+                            <strong>{{ new Date(sub.end_date).toLocaleDateString() }}</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="mt-3 pt-2 border-top d-flex justify-content-between align-items-center">
+                        <span class="x-small text-muted">Pass ID #{{ sub.id }}</span>
+                        <button 
+                          v-if="sub.status === 'active'"
+                          class="btn btn-outline-danger btn-xs"
+                          @click="cancelPass(sub.id)"
+                        >
+                          Cancel Pass
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- ==================== BOOKING MODAL ==================== -->
@@ -826,6 +994,126 @@
         </div>
       </div>
 
+      <!-- ==================== PURCHASE PASS MODAL ==================== -->
+      <div v-if="showPassModal" class="modal-backdrop fade show"></div>
+      <div v-if="showPassModal" class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title fw-bold">🎟️ Purchase Recurring Commuter Pass</h5>
+              <button type="button" class="btn-close" @click="showPassModal = false"></button>
+            </div>
+            <form @submit.prevent="submitBuyPass">
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Select Parking Facility *</label>
+                  <select v-model="passForm.lot_id" class="form-select" required>
+                    <option value="" disabled>-- Select a Parking Lot --</option>
+                    <option v-for="lot in lots" :key="'lot-pass-' + lot.id" :value="lot.id">
+                      🏢 {{ lot.prime_location_name }} (₹{{ lot.price }}/hr base)
+                    </option>
+                  </select>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Pass Type *</label>
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <div 
+                        class="border rounded-3 p-3 text-center cursor-pointer h-100 transition-card"
+                        :class="passForm.pass_type === 'floating' ? 'border-primary bg-primary-subtle ring-2' : 'bg-light'"
+                        @click="passForm.pass_type = 'floating'"
+                      >
+                        <div class="fs-4 mb-1">🔄</div>
+                        <div class="fw-bold">Floating Pass</div>
+                        <small class="text-muted">Guaranteed spot anywhere in lot</small>
+                      </div>
+                    </div>
+                    <div class="col-6">
+                      <div 
+                        class="border rounded-3 p-3 text-center cursor-pointer h-100 transition-card"
+                        :class="passForm.pass_type === 'dedicated' ? 'border-primary bg-primary-subtle ring-2' : 'bg-light'"
+                        @click="passForm.pass_type = 'dedicated'"
+                      >
+                        <div class="fs-4 mb-1">⭐</div>
+                        <div class="fw-bold">Dedicated Bay</div>
+                        <small class="text-muted">Private dedicated reserved bay</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Billing Cycle *</label>
+                  <div class="btn-group w-100" role="group">
+                    <button
+                      type="button"
+                      class="btn py-2 fw-semibold"
+                      :class="passForm.billing_cycle === 'monthly' ? 'btn-primary' : 'btn-outline-primary'"
+                      @click="passForm.billing_cycle = 'monthly'"
+                    >
+                      Monthly (30d)
+                    </button>
+                    <button
+                      type="button"
+                      class="btn py-2 fw-semibold"
+                      :class="passForm.billing_cycle === 'quarterly' ? 'btn-primary' : 'btn-outline-primary'"
+                      @click="passForm.billing_cycle = 'quarterly'"
+                    >
+                      Quarterly (90d)
+                    </button>
+                    <button
+                      type="button"
+                      class="btn py-2 fw-semibold"
+                      :class="passForm.billing_cycle === 'annual' ? 'btn-primary' : 'btn-outline-primary'"
+                      @click="passForm.billing_cycle = 'annual'"
+                    >
+                      Annual (365d)
+                    </button>
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Vehicle Registration Plate *</label>
+                  <div class="input-group">
+                    <input
+                      v-model="passForm.vehicle_plate"
+                      type="text"
+                      class="form-control font-monospace fw-bold"
+                      placeholder="e.g. DL-01-AB-1234"
+                      required
+                    />
+                    <select v-model="passForm.vehicle_type" class="form-select" style="max-width: 130px;">
+                      <option value="Car">🚗 Car</option>
+                      <option value="SUV">🚙 SUV</option>
+                      <option value="EV">⚡ EV</option>
+                      <option value="Motorcycle">🏍️ Bike</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="p-3 bg-light rounded-3 d-flex justify-content-between align-items-center border">
+                  <div>
+                    <div class="small text-muted">Pass Total Amount</div>
+                    <div class="fw-bold fs-5 text-success">₹{{ computeEstimatedPassPrice() }}</div>
+                  </div>
+                  <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
+                    Instant Activation
+                  </span>
+                </div>
+              </div>
+
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @click="showPassModal = false">Cancel</button>
+                <button type="submit" class="btn btn-success fw-bold" :disabled="purchasingPass">
+                  {{ purchasingPass ? 'Activating Pass...' : 'Confirm & Activate Pass' }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </template>
@@ -888,10 +1176,38 @@ export default {
       vacating: false,
       exporting: false,
       exportJob: null,
-      monthlyReport: {}
+      monthlyReport: {},
+      subscriptions: [],
+      subscriptionsLoading: false,
+      showPassModal: false,
+      purchasingPass: false,
+      passForm: {
+        lot_id: '',
+        pass_type: 'floating',
+        billing_cycle: 'monthly',
+        vehicle_plate: '',
+        vehicle_type: 'Car'
+      },
+      lotSearchQuery: '',
+      eventSource: null
     }
   },
   computed: {
+    filteredLots() {
+      if (!this.lotSearchQuery || !this.lotSearchQuery.trim()) {
+        return this.lots
+      }
+      const q = this.lotSearchQuery.toLowerCase().trim()
+      return this.lots.filter(lot => {
+        const nameMatch = lot.prime_location_name && lot.prime_location_name.toLowerCase().includes(q)
+        const addrMatch = lot.address && lot.address.toLowerCase().includes(q)
+        const pinMatch = lot.pin_code && String(lot.pin_code).toLowerCase().includes(q)
+        const spotMatch = lot.floors && lot.floors.some(f => 
+          f.spots && f.spots.some(s => s.spot_number && s.spot_number.toLowerCase().includes(q))
+        )
+        return nameMatch || addrMatch || pinMatch || spotMatch
+      })
+    },
     filteredReservations() {
       let list = this.reservations
       if (this.resStatusFilter !== 'all') {
@@ -943,6 +1259,10 @@ export default {
         this.fetchVehicles()
       } else if (newTab === 'reservations') {
         this.fetchReservations()
+      } else if (newTab === 'subscriptions') {
+        this.fetchSubscriptions()
+        this.fetchLots()
+        this.fetchVehicles()
       } else if (newTab === 'report') {
         this.fetchMonthlyReport()
       }
@@ -953,6 +1273,7 @@ export default {
       this.fetchLots()
       this.fetchReservations()
       this.fetchVehicles()
+      this.initLiveStream()
     }
     this.timerInterval = setInterval(() => {
       this.nowTimestamp = Date.now()
@@ -962,6 +1283,7 @@ export default {
     if (this.timerInterval) {
       clearInterval(this.timerInterval)
     }
+    this.closeLiveStream()
   },
   methods: {
     getAuthHeaders() {
@@ -1011,12 +1333,15 @@ export default {
       this.registerSuccessMessage = ''
       this.fetchLots()
       this.fetchReservations()
+      this.fetchVehicles()
+      this.initLiveStream()
     },
     handleRegisterSuccess() {
       this.showRegister = false
       this.registerSuccessMessage = 'Registration successful! Please log in.'
     },
     logout() {
+      this.closeLiveStream()
       localStorage.removeItem('userToken')
       localStorage.removeItem('userData')
       this.isLoggedIn = false
@@ -1024,6 +1349,8 @@ export default {
       this.activeReservation = null
       this.reservations = []
       this.lots = []
+      this.subscriptions = []
+      this.lotSearchQuery = ''
     },
     showAlert(msg, type = 'success') {
       this.alertMessage = msg
@@ -1036,9 +1363,14 @@ export default {
       const d = new Date(safeStr)
       return isNaN(d.getTime()) ? new Date(isoStr).toLocaleString() : d.toLocaleString()
     },
-    async fetchLots() {
+    async fetchLots(searchQuery = null) {
       try {
-        const res = await axios.get('http://localhost:5000/api/parking-lots')
+        const params = {}
+        const q = searchQuery !== null ? searchQuery : (this.lotSearchQuery ? this.lotSearchQuery.trim() : '')
+        if (q) {
+          params.search = q
+        }
+        const res = await axios.get('http://localhost:5000/api/parking-lots', { params })
         this.lots = res.data.parking_lots || []
       } catch (err) {
         console.error(err)
@@ -1310,6 +1642,97 @@ export default {
         this.monthlyReport = res.data
       } catch (err) {
         console.error(err)
+      }
+    },
+    async fetchSubscriptions() {
+      if (!this.isLoggedIn) return
+      this.subscriptionsLoading = true
+      try {
+        const res = await axios.get('http://localhost:5000/api/subscriptions', this.getAuthHeaders())
+        this.subscriptions = res.data.subscriptions || []
+      } catch (err) {
+        console.error('Failed to fetch subscriptions:', err)
+      } finally {
+        this.subscriptionsLoading = false
+      }
+    },
+    openBuyPassModal() {
+      const defVehicle = this.vehicles.find(v => v.is_default) || this.vehicles[0] || null
+      this.passForm = {
+        lot_id: this.lots.length > 0 ? this.lots[0].id : '',
+        pass_type: 'floating',
+        billing_cycle: 'monthly',
+        vehicle_plate: defVehicle ? defVehicle.license_plate : '',
+        vehicle_type: defVehicle ? defVehicle.vehicle_type : 'Car'
+      }
+      this.showPassModal = true
+    },
+    computeEstimatedPassPrice() {
+      const lot = this.lots.find(l => l.id === this.passForm.lot_id)
+      const baseHourly = lot ? (lot.price || 40) : 40
+      const cycleDays = { monthly: 120, quarterly: 320, annual: 1100 }
+      const mult = cycleDays[this.passForm.billing_cycle] || 120
+      const typeMult = this.passForm.pass_type === 'dedicated' ? 1.35 : 1.0
+      return Math.round(baseHourly * mult * typeMult)
+    },
+    async submitBuyPass() {
+      if (!this.passForm.lot_id || !this.passForm.vehicle_plate.trim()) return
+      this.purchasingPass = true
+      try {
+        const payload = {
+          lot_id: this.passForm.lot_id,
+          pass_type: this.passForm.pass_type,
+          billing_cycle: this.passForm.billing_cycle,
+          vehicle_plate: this.passForm.vehicle_plate.trim().toUpperCase(),
+          vehicle_type: this.passForm.vehicle_type || 'Car'
+        }
+        const res = await axios.post('http://localhost:5000/api/subscriptions', payload, this.getAuthHeaders())
+        this.showAlert(`Pass activated successfully! Pass Code: ${res.data.pass_code}`)
+        this.showPassModal = false
+        this.fetchSubscriptions()
+      } catch (err) {
+        this.showAlert(err.response?.data?.error || 'Failed to purchase pass', 'danger')
+      } finally {
+        this.purchasingPass = false
+      }
+    },
+    async cancelPass(subId) {
+      if (!confirm('Are you sure you want to cancel this commuter pass?')) return
+      try {
+        await axios.post(`http://localhost:5000/api/subscriptions/${subId}/cancel`, {}, this.getAuthHeaders())
+        this.showAlert('Pass cancelled successfully.')
+        this.fetchSubscriptions()
+      } catch (err) {
+        this.showAlert(err.response?.data?.error || 'Failed to cancel pass', 'danger')
+      }
+    },
+    initLiveStream() {
+      if (this.eventSource) this.closeLiveStream()
+      try {
+        this.eventSource = new EventSource('http://localhost:5000/api/stream/spots')
+        this.eventSource.addEventListener('spot_update', (e) => {
+          try {
+            const data = JSON.parse(e.data)
+            this.handleRealtimeSpotUpdate(data)
+          } catch (err) {
+            console.error('SSE spot parse error:', err)
+          }
+        })
+      } catch (err) {
+        console.error('Could not connect to SSE live map stream:', err)
+      }
+    },
+    closeLiveStream() {
+      if (this.eventSource) {
+        this.eventSource.close()
+        this.eventSource = null
+      }
+    },
+    handleRealtimeSpotUpdate(data) {
+      // Refresh lot availability counts in real time
+      this.fetchLots()
+      if (this.activeTab === 'reservations' || this.activeTab === 'dashboard') {
+        this.fetchReservations()
       }
     }
   }
