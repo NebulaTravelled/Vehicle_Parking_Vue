@@ -1845,6 +1845,25 @@ def create_reservation():
     if not parking_ts:
         parking_ts = sched_start if (booking_type == 'scheduled' and sched_start) else datetime.now(timezone.utc)
     
+    # Calculate planned end time for immediate booking if duration_hours or scheduled_end_time provided
+    if booking_type == 'immediate':
+        sched_start = parking_ts
+        duration_val = data.get('duration_hours') or data.get('hours') or data.get('booked_hours')
+        if duration_val:
+            try:
+                hrs = float(duration_val)
+                sched_end = parking_ts + timedelta(hours=hrs)
+            except Exception:
+                pass
+        elif data.get('scheduled_end_time'):
+            try:
+                end_str = data.get('scheduled_end_time')
+                sched_end = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+                if sched_end.tzinfo is None:
+                    sched_end = sched_end.replace(tzinfo=timezone.utc)
+            except Exception:
+                pass
+
     # Create reservation with complete audit trail & location hierarchy
     reservation = Reservation(
         spot_id=spot.id,
@@ -1987,8 +2006,8 @@ def vacate_reservation(res_id):
                 
         parking_cost = base_cost
         
-    # 2. Overstay Penalty for Scheduled Pre-bookings
-    if reservation.booking_type == 'scheduled' and reservation.scheduled_end_time:
+    # 2. Overstay Penalty (Applies if vehicle stays past planned / scheduled end time and grace period not applicable)
+    if reservation.scheduled_end_time and not grace_applied:
         sched_end_utc = reservation.scheduled_end_time
         if sched_end_utc.tzinfo is None:
             sched_end_utc = sched_end_utc.replace(tzinfo=timezone.utc)
@@ -2088,6 +2107,8 @@ def get_reservations():
             "lot_id": lot.id if lot else None,
             "lot_name": venue_name,
             "lot_price": lot.price if lot else 0.0,
+            "overstay_penalty_rate": lot.overstay_penalty_rate if lot and lot.overstay_penalty_rate is not None else 50.0,
+            "grace_period_minutes": lot.grace_period_minutes if lot and lot.grace_period_minutes is not None else 15,
             "vehicle_id": r.vehicle_id,
             "vehicle_number": r.vehicle_number,
             "vehicle_type": r.vehicle_type or 'Car',

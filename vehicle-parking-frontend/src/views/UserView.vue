@@ -1,5 +1,7 @@
 <template>
-  <div class="bg-light min-vh-100">
+  <div class="user-portal-root min-vh-100 bg-slate-50">
+    
+    <!-- When Logged Out: Authentication Views -->
     <div v-if="!isLoggedIn">
       <UserLogin
         v-if="!showRegister"
@@ -14,286 +16,434 @@
       />
     </div>
     
-    <div v-else>
-      <!-- Navigation Bar -->
-      <nav class="navbar navbar-expand-lg navbar-dark bg-success shadow-sm px-4">
-        <div class="container-fluid">
-          <span class="navbar-brand fw-bold">
-            🚘 User Parking Portal
-          </span>
-          <div class="d-flex align-items-center gap-3">
-            <span class="text-white small">Welcome, <strong>{{ currentUser.username || 'User' }}</strong></span>
-            <button class="btn btn-outline-light btn-sm" @click="logout">Logout</button>
-          </div>
-        </div>
-      </nav>
+    <!-- When Logged In: Main User Dashboard -->
+    <div v-else class="dashboard-shell">
       
-      <!-- Tab Navigation -->
-      <div class="bg-white border-bottom px-4">
-        <ul class="nav nav-tabs border-0 pt-2">
-          <li class="nav-item">
-            <button
-              class="nav-link"
-              :class="{ active: activeTab === 'dashboard' }"
+      <!-- Top Navigation Header -->
+      <header class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top py-2.5 px-3 px-md-4 shadow-xs">
+        <div class="container-fluid px-0">
+          
+          <!-- Logo & Portal Indicator -->
+          <div class="d-flex align-items-center gap-3">
+            <router-link to="/" class="d-flex align-items-center gap-2 text-decoration-none text-dark">
+              <div class="brand-icon-box bg-success text-white rounded-3 d-flex align-items-center justify-content-center shadow-xs">
+                <i class="bi bi-p-square-fill fs-5"></i>
+              </div>
+              <span class="fw-bold fs-5 tracking-tight">Smart<span class="text-success">Park</span></span>
+            </router-link>
+            <span class="badge bg-light text-secondary border px-2.5 py-1 rounded-pill small fw-medium d-none d-sm-inline-block">
+              <i class="bi bi-person-fill text-success me-1"></i> Driver Portal
+            </span>
+          </div>
+
+          <!-- User Controls & Active Indicator -->
+          <div class="d-flex align-items-center gap-2 gap-md-3 ms-auto">
+            
+            <!-- Quick Active Spots Pill (if any) -->
+            <button 
+              v-if="activeReservations.length > 0" 
+              class="btn btn-warning-subtle text-warning-emphasis border border-warning-subtle btn-sm rounded-pill px-3 py-1 fw-semibold d-flex align-items-center gap-1.5 shadow-xs"
               @click="activeTab = 'dashboard'"
+              title="View your active parking sessions"
             >
-              🅿️ Book & Active Spot
+              <span class="pulse-dot-warning"></span>
+              <span>{{ activeReservations.length }} Spot{{ activeReservations.length > 1 ? 's' : '' }} Active</span>
             </button>
-          </li>
-          <li class="nav-item">
-            <button
-              class="nav-link"
-              :class="{ active: activeTab === 'garage' }"
-              @click="activeTab = 'garage'"
-            >
-              🚘 My Garage <span v-if="vehicles.length" class="badge bg-secondary ms-1">{{ vehicles.length }}</span>
+
+            <!-- User Profile Chip -->
+            <div class="d-flex align-items-center gap-2 bg-light border rounded-pill py-1 px-2.5 text-secondary">
+              <div class="avatar-circle bg-success text-white rounded-circle d-flex align-items-center justify-content-center fw-bold small">
+                {{ (currentUser.username || 'U').charAt(0).toUpperCase() }}
+              </div>
+              <span class="small fw-semibold text-dark d-none d-md-inline">{{ currentUser.username || 'Driver' }}</span>
+            </div>
+
+            <!-- Logout Button -->
+            <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1 fw-medium" @click="logout" title="Sign out of portal">
+              <i class="bi bi-box-arrow-right me-1"></i>
+              <span class="d-none d-sm-inline">Sign Out</span>
             </button>
-          </li>
-          <li class="nav-item">
-            <button
-              class="nav-link"
-              :class="{ active: activeTab === 'reservations' }"
-              @click="activeTab = 'reservations'"
-            >
-              📋 My Reservations
-            </button>
-          </li>
-          <li class="nav-item">
-            <button
-              class="nav-link"
-              :class="{ active: activeTab === 'report' }"
-              @click="activeTab = 'report'"
-            >
-              📊 Monthly Activity Report
-            </button>
-          </li>
-          <li class="nav-item">
-            <button
-              class="nav-link"
-              :class="{ active: activeTab === 'subscriptions' }"
-              @click="activeTab = 'subscriptions'"
-            >
-              🎟️ My Passes & Subscriptions <span v-if="subscriptions.length" class="badge bg-primary ms-1">{{ subscriptions.length }}</span>
-            </button>
-          </li>
-        </ul>
+          </div>
+
+        </div>
+      </header>
+      
+      <!-- Clean Secondary Tab Navigation -->
+      <div class="bg-white border-bottom px-3 px-md-4">
+        <div class="container-fluid px-0">
+          <ul class="nav nav-pills gap-1 py-2 user-nav-tabs">
+            <li class="nav-item">
+              <button
+                class="nav-link py-1.5 px-3 rounded-pill fw-semibold small d-flex align-items-center gap-1.5"
+                :class="{ active: activeTab === 'dashboard' }"
+                @click="activeTab = 'dashboard'"
+              >
+                <i class="bi bi-geo-alt-fill"></i>
+                <span>Find & Book</span>
+              </button>
+            </li>
+            <li class="nav-item">
+              <button
+                class="nav-link py-1.5 px-3 rounded-pill fw-semibold small d-flex align-items-center gap-1.5"
+                :class="{ active: activeTab === 'garage' }"
+                @click="activeTab = 'garage'"
+              >
+                <i class="bi bi-car-front-fill"></i>
+                <span>My Garage</span>
+                <span v-if="vehicles.length" class="badge rounded-pill ms-1" :class="activeTab === 'garage' ? 'bg-white text-dark' : 'bg-secondary-subtle text-secondary'">
+                  {{ vehicles.length }}
+                </span>
+              </button>
+            </li>
+            <li class="nav-item">
+              <button
+                class="nav-link py-1.5 px-3 rounded-pill fw-semibold small d-flex align-items-center gap-1.5"
+                :class="{ active: activeTab === 'reservations' }"
+                @click="activeTab = 'reservations'"
+              >
+                <i class="bi bi-clock-history"></i>
+                <span>My Bookings</span>
+                <span v-if="reservations.length" class="badge rounded-pill ms-1" :class="activeTab === 'reservations' ? 'bg-white text-dark' : 'bg-secondary-subtle text-secondary'">
+                  {{ reservations.length }}
+                </span>
+              </button>
+            </li>
+            <li class="nav-item">
+              <button
+                class="nav-link py-1.5 px-3 rounded-pill fw-semibold small d-flex align-items-center gap-1.5"
+                :class="{ active: activeTab === 'subscriptions' }"
+                @click="activeTab = 'subscriptions'"
+              >
+                <i class="bi bi-ticket-perforated-fill"></i>
+                <span>Commuter Passes</span>
+                <span v-if="subscriptions.length" class="badge rounded-pill ms-1" :class="activeTab === 'subscriptions' ? 'bg-white text-dark' : 'bg-primary-subtle text-primary'">
+                  {{ subscriptions.length }}
+                </span>
+              </button>
+            </li>
+            <li class="nav-item">
+              <button
+                class="nav-link py-1.5 px-3 rounded-pill fw-semibold small d-flex align-items-center gap-1.5"
+                :class="{ active: activeTab === 'report' }"
+                @click="activeTab = 'report'"
+              >
+                <i class="bi bi-file-earmark-bar-graph"></i>
+                <span>Monthly Report</span>
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
 
-      <!-- Main Container -->
-      <div class="container p-4">
-        <!-- Global Feedback Alert -->
-        <div v-if="alertMessage" class="alert alert-dismissible fade show mb-4" :class="'alert-' + alertType">
-          {{ alertMessage }}
+      <!-- Main Dashboard Content Container -->
+      <main class="container-fluid px-3 px-md-4 py-4 max-w-1400 mx-auto">
+        
+        <!-- Global Feedback Alert Banner -->
+        <div v-if="alertMessage" class="alert alert-dismissible fade show rounded-3 shadow-xs mb-4" :class="'alert-' + alertType">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi" :class="alertType === 'success' ? 'bi-check-circle-fill text-success fs-5' : 'bi-exclamation-triangle-fill text-danger fs-5'"></i>
+            <span class="fw-medium">{{ alertMessage }}</span>
+          </div>
           <button type="button" class="btn-close" @click="alertMessage = ''"></button>
         </div>
 
-        <!-- ==================== TAB 1: DASHBOARD & BOOKING ==================== -->
+        <!-- ========================================================= -->
+        <!-- TAB 1: FIND & BOOK PARKING (DASHBOARD)                     -->
+        <!-- ========================================================= -->
         <div v-if="activeTab === 'dashboard'">
           
-          <!-- Multi-Slot Active Reservations Section -->
-          <div v-if="activeReservations.length > 0" class="mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <h5 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
-                <span class="badge bg-warning text-dark">{{ activeReservations.length }} Active</span>
-                <span>My Active Parking Reservations</span>
-              </h5>
-              <small class="text-muted">Independent live timers & billing per active spot</small>
+          <!-- Active Sessions Banner (Only Shown When Parked) -->
+          <section v-if="activeReservations.length > 0" class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2.5">
+              <h6 class="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+                <span class="pulse-dot-green"></span>
+                <span>Active Parking Sessions</span>
+                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill">
+                  {{ activeReservations.length }} Active
+                </span>
+              </h6>
+              <span class="text-muted small">Live timer running</span>
             </div>
 
             <div class="row g-3">
-              <div v-for="res in activeReservations" :key="'active-' + res.id" class="col-md-6 col-lg-4">
-                <div class="card shadow-sm border-0 border-start border-warning border-5 h-100 bg-white">
-                  <div class="card-body p-3 d-flex flex-column justify-content-between">
+              <div v-for="res in activeReservations" :key="'active-' + res.id" class="col-md-6 col-xl-4">
+                <div class="card h-100 border-0 shadow-sm rounded-4 bg-white active-session-card">
+                  <div class="card-body p-3.5 d-flex flex-column justify-content-between">
                     <div>
-                      <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div class="d-flex align-items-center gap-1">
-                          <span class="badge" :class="res.status === 'scheduled' ? 'bg-info text-dark' : 'bg-warning text-dark'">
-                            {{ res.status === 'scheduled' ? '📅 Scheduled' : '🟢 Active' }}
+                      
+                      <!-- Header Row -->
+                      <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                          <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5 small fw-semibold">
+                            🟢 In Session
                           </span>
-                          <span class="badge bg-light text-secondary border">
-                            {{ res.booking_type === 'scheduled' ? 'Advance Pre-Book' : 'Park Now' }}
+                          <span class="badge bg-light text-secondary border rounded-pill ms-1 px-2 py-0.5 small">
+                            {{ res.booking_type === 'scheduled' ? 'Advance' : 'Park Now' }}
                           </span>
                         </div>
-                        <span v-if="res.spot_type === 'handicap'" class="badge bg-info text-dark">♿ Handicap</span>
-                        <span v-else class="badge bg-secondary">🚗 Regular</span>
+                        <span v-if="res.spot_type === 'handicap'" class="badge bg-info-subtle text-info border border-info-subtle rounded-pill">
+                          ♿ Handicap
+                        </span>
+                        <span v-else class="badge bg-light text-secondary border rounded-pill">
+                          🚗 Regular
+                        </span>
                       </div>
 
-                      <h5 class="fw-bold text-primary mb-1">{{ res.lot_name }}</h5>
-                      <div class="badge bg-light text-secondary border mb-2">
-                        🏢 {{ res.floor_name || 'Ground Floor' }}
+                      <!-- Facility & Location Hierarchy -->
+                      <h5 class="fw-bold text-dark mb-1">{{ res.lot_name }}</h5>
+                      <div class="text-muted small mb-3 d-flex align-items-center gap-1.5 flex-wrap">
+                        <span class="badge bg-slate-100 text-dark border">Deck: {{ res.floor_name || 'Ground' }}</span>
+                        <span class="text-secondary">•</span>
+                        <span class="badge bg-dark text-white font-monospace">Bay #{{ res.spot_number }}</span>
+                        <span class="text-secondary">•</span>
+                        <span class="font-monospace fw-semibold text-dark">{{ res.vehicle_number }}</span>
                       </div>
 
-                      <!-- Scheduled Window Info -->
-                      <div v-if="res.booking_type === 'scheduled' && res.scheduled_start_time" class="p-2 bg-primary-subtle rounded-3 small mb-2 text-primary">
-                        <div class="fw-semibold">📅 Reserved Window:</div>
-                        <div>{{ formatTime(res.scheduled_start_time) }} ➔ {{ formatTime(res.scheduled_end_time) }}</div>
+                      <!-- Scheduled Window (if scheduled) -->
+                      <div v-if="res.booking_type === 'scheduled' && res.scheduled_start_time" class="bg-primary-subtle text-primary p-2 rounded-3 small mb-2">
+                        <i class="bi bi-calendar-event me-1"></i>
+                        <span>{{ formatTime(res.scheduled_start_time) }} ➔ {{ formatTime(res.scheduled_end_time) }}</span>
                       </div>
 
-                      <div class="bg-light p-2.5 rounded-3 border small mb-3">
-                        <div class="d-flex justify-content-between mb-1">
-                          <span class="text-muted">Spot Number:</span>
-                          <strong class="text-dark fs-6">{{ res.spot_number }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between mb-1">
-                          <span class="text-muted">Vehicle Plate:</span>
-                          <strong>{{ res.vehicle_number }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between mb-1">
-                          <span class="text-muted">Entry Time:</span>
-                          <span>{{ formatTime(res.parking_timestamp) }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between text-primary border-top pt-1 mt-1">
-                          <span>Elapsed Time:</span>
-                          <strong class="font-monospace">⏱️ {{ getElapsed(res.parking_timestamp) }}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between text-success">
-                          <span>Est. Current Cost:</span>
-                          <strong>₹{{ getRunningCost(res) }}</strong>
+                      <!-- Scheduled / Booked End Window & Overstay Alert -->
+                      <div v-if="res.scheduled_end_time" class="p-2 rounded-3 small mb-2 border" :class="isOverstaying(res) ? 'bg-danger-subtle text-danger border-danger-subtle' : 'bg-primary-subtle text-primary border-primary-subtle'">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-1">
+                          <span>
+                            <i class="bi" :class="isOverstaying(res) ? 'bi-exclamation-triangle-fill text-danger' : 'bi-calendar-check'"></i>
+                            <strong class="ms-1">{{ isOverstaying(res) ? 'Overstaying!' : 'Booked Until:' }}</strong>
+                            {{ formatTime(res.scheduled_end_time) }}
+                          </span>
+                          <span v-if="isOverstaying(res)" class="badge bg-danger text-white">
+                            +₹{{ res.overstay_penalty_rate || 50 }}/hr Surcharge
+                          </span>
                         </div>
                       </div>
+
+                      <!-- Live Metrics Strip -->
+                      <div class="bg-light p-2.5 rounded-3 border mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1 small">
+                          <span class="text-muted">Parked Since:</span>
+                          <span class="text-dark fw-medium">{{ formatTime(res.parking_timestamp) }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                          <span class="text-muted small">Elapsed Time:</span>
+                          <strong class="font-monospace text-primary">⏱️ {{ getElapsed(res.parking_timestamp) }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center border-top pt-1 text-success">
+                          <span class="small fw-semibold">Current Tariff:</span>
+                          <strong class="fs-6 font-monospace">₹{{ getRunningCost(res) }}</strong>
+                        </div>
+                      </div>
+
                     </div>
 
+                    <!-- Vacate / Release Action -->
                     <button 
-                      class="btn btn-outline-danger btn-sm w-100 fw-semibold shadow-sm"
+                      class="btn btn-outline-danger btn-sm w-100 py-2 fw-semibold rounded-3 shadow-xs d-flex align-items-center justify-content-center gap-2"
                       @click="handleVacateSpot(res.id)" 
                       :disabled="vacating"
                     >
-                      {{ vacating ? 'Releasing...' : '🚪 Vacate / Release Spot' }}
+                      <i class="bi bi-box-arrow-left"></i>
+                      <span>{{ vacating ? 'Releasing Spot...' : 'Vacate & End Session' }}</span>
                     </button>
                   </div>
                 </div>
               </div>
             </div>
+          </section>
+
+          <!-- Search & Filter Controls (Streamlined, No Clutter) -->
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div>
+              <h4 class="fw-bold text-dark mb-0.5">Explore Parking Spaces</h4>
+              <p class="text-muted small mb-0">Search facilities by name, street address, or postal PIN code.</p>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 d-flex align-items-center gap-1.5" @click="fetchLots('')">
+              <i class="bi bi-arrow-clockwise"></i>
+              <span>Refresh</span>
+            </button>
           </div>
 
-          <!-- Section: Available Parking Lots for 4-Wheeler Booking -->
-          <!-- Section: Available Parking Lots for 4-Wheeler Booking -->
-          <div class="card shadow-sm border-0 mb-4 rounded-4 overflow-hidden">
-            <div class="card-body p-4">
-              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-                <div>
-                  <h4 class="fw-bold mb-1 text-dark d-flex align-items-center gap-2">
-                    <span>🅿️ Available Parking Slots</span>
-                    <span class="badge bg-primary fs-6">{{ filteredLots.length }} Available Locations</span>
-                  </h4>
-                  <p class="text-muted small mb-0">Search and reserve parking spots by facility name, address, or PIN code.</p>
-                </div>
-                <button class="btn btn-outline-success btn-sm" @click="fetchLots('')">🔄 Refresh Lots</button>
-              </div>
-
-              <!-- Search Bar for Name, Address, Pincode -->
+          <!-- Clean Search & Filter Bar -->
+          <div class="card border-0 shadow-xs rounded-4 bg-white mb-4 p-3">
+            <div class="card-body p-0">
               <div class="row g-2 align-items-center">
+                
+                <!-- Search Input -->
                 <div class="col-md-8 col-lg-9">
                   <div class="input-group">
-                    <span class="input-group-text bg-white border-end-0 text-muted">
-                      🔍
+                    <span class="input-group-text bg-light border-0 text-muted ps-3 pe-2 rounded-start-pill">
+                      <i class="bi bi-search text-success"></i>
                     </span>
                     <input
                       v-model="lotSearchQuery"
                       type="text"
-                      class="form-control border-start-0 ps-0"
-                      placeholder="Search parking slots by name, address, or pincode (e.g. Grand Central, MG Road, 110001)..."
+                      class="form-control bg-light border-0 shadow-none ps-1 fs-6 rounded-end-pill"
+                      placeholder="Search parking facilities by name, address, or PIN code..."
                       @keydown.esc="lotSearchQuery = ''"
                     />
                     <button
                       v-if="lotSearchQuery"
-                      class="btn btn-outline-secondary border-start-0"
+                      class="btn btn-link text-muted border-0 pe-3 text-decoration-none"
                       type="button"
                       @click="lotSearchQuery = ''"
                       title="Clear search"
                     >
-                      ✕
+                      <i class="bi bi-x-circle-fill text-secondary"></i>
                     </button>
                   </div>
                 </div>
+
+                <!-- Results Counter Pill -->
                 <div class="col-md-4 col-lg-3 text-md-end">
-                  <span class="badge bg-light text-secondary border p-2 w-100 text-center fw-normal">
+                  <span class="badge bg-light text-secondary border py-2 px-3 rounded-pill fw-normal w-100 text-center">
                     Showing <strong>{{ filteredLots.length }}</strong> of {{ lots.length }} Facilities
                   </span>
                 </div>
+
               </div>
 
-              <!-- Active Search Filter Indicator -->
-              <div v-if="lotSearchQuery.trim()" class="mt-2.5 small d-flex align-items-center gap-2 text-muted">
-                <span>Active search filter:</span>
-                <span class="badge bg-primary-subtle text-primary border font-monospace">"{{ lotSearchQuery.trim() }}"</span>
-                <button class="btn btn-link btn-xs text-danger p-0 ms-1 text-decoration-none" @click="lotSearchQuery = ''">Clear filter</button>
+              <!-- Quick Filter Pills -->
+              <div class="d-flex align-items-center gap-1.5 mt-3 pt-2.5 border-top flex-wrap">
+                <span class="x-small text-muted fw-semibold me-1"><i class="bi bi-funnel-fill me-1"></i>Filter:</span>
+                <button 
+                  class="btn btn-xs rounded-pill px-2.5 py-1 fw-medium transition-all"
+                  :class="activeQuickFilter === 'all' ? 'btn-dark text-white shadow-xs' : 'btn-outline-secondary bg-white'"
+                  @click="activeQuickFilter = 'all'"
+                >
+                  All Facilities
+                </button>
+                <button 
+                  class="btn btn-xs rounded-pill px-2.5 py-1 fw-medium transition-all"
+                  :class="activeQuickFilter === 'available' ? 'btn-success text-white shadow-xs' : 'btn-outline-secondary bg-white'"
+                  @click="activeQuickFilter = 'available'"
+                >
+                  🟢 Available Now
+                </button>
+                <button 
+                  class="btn btn-xs rounded-pill px-2.5 py-1 fw-medium transition-all"
+                  :class="activeQuickFilter === 'budget' ? 'btn-primary text-white shadow-xs' : 'btn-outline-secondary bg-white'"
+                  @click="activeQuickFilter = 'budget'"
+                >
+                  💰 Under ₹50/hr
+                </button>
+                <button 
+                  class="btn btn-xs rounded-pill px-2.5 py-1 fw-medium transition-all"
+                  :class="activeQuickFilter === 'handicap' ? 'btn-info text-dark shadow-xs' : 'btn-outline-secondary bg-white'"
+                  @click="activeQuickFilter = 'handicap'"
+                >
+                  ♿ Accessible
+                </button>
+                <button 
+                  class="btn btn-xs rounded-pill px-2.5 py-1 fw-medium transition-all"
+                  :class="activeQuickFilter === 'multi_deck' ? 'btn-secondary text-white shadow-xs' : 'btn-outline-secondary bg-white'"
+                  @click="activeQuickFilter = 'multi_deck'"
+                >
+                  🏢 Multi-Deck
+                </button>
+                <button
+                  v-if="lotSearchQuery || activeQuickFilter !== 'all'"
+                  class="btn btn-xs btn-link text-danger text-decoration-none ms-auto fw-semibold"
+                  @click="lotSearchQuery = ''; activeQuickFilter = 'all'"
+                >
+                  Reset Filters
+                </button>
               </div>
+
             </div>
           </div>
 
-          <!-- Empty State: No Lots in System -->
-          <div v-if="lots.length === 0" class="card text-center py-5 shadow-sm border-0 rounded-4">
-            <div class="card-body">
-              <div class="fs-1 text-muted mb-2">🅿️</div>
-              <h5 class="fw-bold text-muted">No parking lots currently available.</h5>
-              <p class="text-muted small">Please check back later or contact the administrator.</p>
-            </div>
-          </div>
-
-          <!-- Empty State: Search Query Yields 0 Results -->
-          <div v-else-if="filteredLots.length === 0" class="card text-center py-5 shadow-sm border-0 rounded-4 mb-4">
-            <div class="card-body">
-              <div class="fs-1 mb-2">🔍</div>
-              <h5 class="fw-bold text-dark">No matching parking slots found</h5>
-              <p class="text-muted small mb-3">
-                No facilities or slots matched your search for "<strong>{{ lotSearchQuery }}</strong>".<br>
-                Try searching by a different name, street address, or 6-digit postal pincode.
+          <!-- Empty State: No Facilities Found -->
+          <div v-if="filteredLots.length === 0" class="card text-center py-5 shadow-xs border-0 rounded-4 bg-white my-4">
+            <div class="card-body py-4">
+              <div class="fs-1 text-muted mb-2">🔍</div>
+              <h5 class="fw-bold text-dark">No parking facilities match your search</h5>
+              <p class="text-muted small mb-3" style="max-width: 480px; margin: 0 auto;">
+                We couldn't find any locations matching "<strong class="text-dark">{{ lotSearchQuery || activeQuickFilter }}</strong>". Try adjusting your search query or reset the filters.
               </p>
-              <button class="btn btn-primary btn-sm fw-semibold" @click="lotSearchQuery = ''">
-                ✕ Clear Search Filter
+              <button class="btn btn-primary btn-sm rounded-pill px-4 fw-semibold" @click="lotSearchQuery = ''; activeQuickFilter = 'all'">
+                Reset Search & Filters
               </button>
             </div>
           </div>
 
-          <div v-else class="row g-4">
-            <div v-for="lot in filteredLots" :key="lot.id" class="col-md-6 col-lg-4">
-              <div class="card shadow-sm h-100 border-0 rounded-3">
-                <div class="card-body d-flex flex-column p-4">
-                  <div class="d-flex justify-content-between align-items-start mb-2">
-                    <h5 class="fw-bold text-primary mb-0">{{ lot.prime_location_name }}</h5>
-                    <span class="badge bg-success fs-6">₹{{ lot.price }}/hr</span>
-                  </div>
-                  <p class="text-muted small mb-1">{{ lot.address }}</p>
-                  <p class="text-muted small mb-2">PIN: {{ lot.pin_code }}</p>
+          <!-- Parking Lots Grid (Clean, Uncluttered Cards) -->
+          <div v-else class="row g-3 g-md-4">
+            <div v-for="lot in filteredLots" :key="lot.id" class="col-md-6 col-xl-4">
+              <div class="card h-100 border-0 shadow-sm rounded-4 bg-white lot-card transition-card">
+                <div class="card-body p-4 d-flex flex-column justify-content-between">
                   
-                  <!-- Floor Count & Dynamic Pricing Badges -->
-                  <div class="d-flex flex-wrap gap-1 mb-2">
-                    <span class="badge bg-secondary-subtle text-secondary border">
-                      🏢 {{ lot.floor_count || (lot.floors ? lot.floors.length : 1) }} Floor{{ (lot.floor_count || 1) > 1 ? 's' : '' }}
-                    </span>
-                    <span class="badge bg-light text-secondary border">⏱️ {{ lot.grace_period_minutes !== undefined ? lot.grace_period_minutes : 15 }}m Grace</span>
-                    <span v-if="lot.daily_rate" class="badge bg-light text-success border">🛡️ ₹{{ lot.daily_rate }}/day Cap</span>
-                    <span v-if="lot.overnight_rate" class="badge bg-light text-primary border">🌙 ₹{{ lot.overnight_rate }} Night</span>
-                    <span v-if="lot.peak_multiplier > 1" class="badge bg-light text-warning-emphasis border">⚡ {{ lot.peak_multiplier }}x Peak</span>
+                  <div>
+                    <!-- Top Title & Tariff Header -->
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                      <div>
+                        <h5 class="fw-bold text-dark mb-1">{{ lot.prime_location_name }}</h5>
+                        <p class="text-muted small mb-0 d-flex align-items-center gap-1">
+                          <i class="bi bi-geo-alt-fill text-danger small"></i>
+                          <span>{{ lot.address }} • PIN {{ lot.pin_code }}</span>
+                        </p>
+                      </div>
+                      <span class="badge bg-success-subtle text-success border border-success-subtle fs-6 fw-bold px-2.5 py-1 rounded-pill whitespace-nowrap">
+                        ₹{{ lot.price }}/hr
+                      </span>
+                    </div>
+
+                    <!-- Clean Highlights (Only Relevant Ones, No Noise) -->
+                    <div class="d-flex flex-wrap gap-1.5 my-3">
+                      <span class="badge bg-light text-secondary border rounded-pill px-2.5 py-1 small">
+                        🏢 {{ lot.floor_count || (lot.floors ? lot.floors.length : 1) }} Floor{{ (lot.floor_count || 1) > 1 ? 's' : '' }}
+                      </span>
+                      <span class="badge bg-light text-secondary border rounded-pill px-2.5 py-1 small">
+                        ⏱️ {{ lot.grace_period_minutes !== undefined ? lot.grace_period_minutes : 15 }}m Grace
+                      </span>
+                      <span v-if="lot.daily_rate && lot.daily_rate > 0" class="badge bg-light text-success border rounded-pill px-2.5 py-1 small">
+                        🛡️ ₹{{ lot.daily_rate }}/day Cap
+                      </span>
+                      <span v-if="lot.overnight_rate && lot.overnight_rate > 0" class="badge bg-light text-primary border rounded-pill px-2.5 py-1 small">
+                        🌙 ₹{{ lot.overnight_rate }} Night
+                      </span>
+                      <span v-if="lot.peak_multiplier && lot.peak_multiplier > 1.0" class="badge bg-light text-warning-emphasis border rounded-pill px-2.5 py-1 small">
+                        ⚡ {{ lot.peak_multiplier }}x Peak
+                      </span>
+                    </div>
+
+                    <!-- Occupancy & Availability Meter -->
+                    <div class="bg-light p-3 rounded-3 border mb-3">
+                      <div class="d-flex justify-content-between align-items-center mb-1.5 small">
+                        <span class="text-secondary fw-medium">Available Capacity:</span>
+                        <strong :class="lot.available_spots > 0 ? 'text-success' : 'text-danger'">
+                          {{ lot.available_spots }} / {{ lot.number_of_spots }} Free
+                        </strong>
+                      </div>
+                      
+                      <!-- Visual Capacity Bar -->
+                      <div class="progress mb-2" style="height: 6px;">
+                        <div 
+                          class="progress-bar"
+                          :class="lot.available_spots > 0 ? 'bg-success' : 'bg-danger'" 
+                          role="progressbar" 
+                          :style="{ width: ((lot.available_spots / Math.max(lot.number_of_spots, 1)) * 100) + '%' }"
+                        ></div>
+                      </div>
+
+                      <div class="d-flex justify-content-between align-items-center text-muted x-small pt-1">
+                        <span>🚗 <strong>{{ lot.regular_available_spots !== undefined ? lot.regular_available_spots : (lot.available_spots || 0) }}</strong> Regular</span>
+                        <span>♿ <strong>{{ lot.handicap_available_spots || 0 }}</strong> Handicap</span>
+                      </div>
+                    </div>
                   </div>
 
-                  <!-- Slot Type Breakdown -->
-                  <div class="bg-light p-2.5 rounded-3 mb-3 small border">
-                    <div class="d-flex justify-content-between mb-1">
-                      <span>Total Available:</span>
-                      <strong class="text-success">{{ lot.available_spots }} / {{ lot.number_of_spots }}</strong>
-                    </div>
-                    <div class="d-flex justify-content-between text-muted border-top pt-1 mt-1">
-                      <span>🚗 Regular Available:</span>
-                      <strong class="text-dark">{{ lot.regular_available_spots !== undefined ? lot.regular_available_spots : (lot.available_spots || 0) }}</strong>
-                    </div>
-                    <div class="d-flex justify-content-between text-muted">
-                      <span>♿ Handicap Available:</span>
-                      <strong class="text-primary">{{ lot.handicap_available_spots || 0 }}</strong>
-                    </div>
-                  </div>
+                  <!-- Booking Button -->
+                  <button
+                    class="btn w-100 py-2.5 fw-semibold rounded-3 shadow-xs d-flex align-items-center justify-content-center gap-2"
+                    :class="lot.available_spots > 0 ? 'btn-success' : 'btn-secondary disabled'"
+                    :disabled="lot.available_spots === 0"
+                    @click="openBookingModal(lot)"
+                  >
+                    <i class="bi" :class="lot.available_spots > 0 ? 'bi-check-circle-fill' : 'bi-slash-circle'"></i>
+                    <span>{{ lot.available_spots > 0 ? 'Reserve Parking Spot' : 'Fully Booked (0 Free)' }}</span>
+                  </button>
 
-                  <div class="mt-auto">
-                    <button
-                      class="btn btn-success w-100 py-2 fw-semibold shadow-sm"
-                      :disabled="lot.available_spots === 0"
-                      @click="openBookingModal(lot)"
-                    >
-                      <span v-if="lot.available_spots === 0">Fully Booked (0 Available)</span>
-                      <span v-else>Book Spot (Regular / Handicap)</span>
-                    </button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -301,431 +451,427 @@
 
         </div>
 
-        <!-- ==================== TAB: CUSTOMER GARAGE ==================== -->
+        <!-- ========================================================= -->
+        <!-- TAB 2: MY VEHICLE GARAGE                                  -->
+        <!-- ========================================================= -->
         <div v-if="activeTab === 'garage'">
-          <div class="card shadow-sm border-0 mb-4">
-            <div class="card-body p-4">
-              <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                <div>
-                  <h4 class="fw-bold mb-1 d-flex align-items-center gap-2">
-                    <span>🚘 My Vehicle Garage</span>
-                    <span class="badge bg-primary fs-6">{{ vehicles.length }} Saved</span>
-                  </h4>
-                  <p class="text-muted small mb-0">Register your personal and family vehicles for seamless 1-click spot reservations.</p>
-                </div>
-                <div class="d-flex gap-2">
-                  <button class="btn btn-outline-primary btn-sm" @click="fetchVehicles">🔄 Refresh</button>
-                  <button class="btn btn-success btn-sm fw-semibold" @click="openAddVehicleModal">
-                    ➕ Add Vehicle
-                  </button>
-                </div>
+          <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+            
+            <!-- Section Header -->
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+              <div>
+                <h4 class="fw-bold text-dark mb-0.5">My Vehicle Garage</h4>
+                <p class="text-muted small mb-0">Saved vehicles for fast 1-click spot reservations.</p>
               </div>
-
-              <!-- Vehicle Cards Grid -->
-              <div v-if="vehicles.length === 0" class="text-center py-5 bg-light rounded-4 border">
-                <div class="fs-1 mb-2">🚗</div>
-                <h5 class="fw-bold text-dark">No vehicles registered yet</h5>
-                <p class="text-muted small mb-3">Add your Car, SUV, EV, or Motorcycle to enable instant quick-booking without typing license plates.</p>
-                <button class="btn btn-primary btn-sm fw-semibold" @click="openAddVehicleModal">
-                  ➕ Add First Vehicle to Garage
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm rounded-pill px-3" @click="fetchVehicles">
+                  <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                </button>
+                <button class="btn btn-success btn-sm rounded-pill px-3 fw-semibold shadow-xs" @click="openAddVehicleModal">
+                  <i class="bi bi-plus-circle me-1"></i> Add Vehicle
                 </button>
               </div>
+            </div>
 
-              <div v-else class="row g-3">
-                <div v-for="v in vehicles" :key="v.id" class="col-md-6 col-lg-4">
-                  <div 
-                    class="card h-100 border transition-card shadow-sm rounded-3 overflow-hidden"
-                    :class="v.is_default ? 'border-primary border-2 bg-primary-subtle bg-opacity-10' : 'border-light-subtle bg-white'"
-                  >
-                    <div class="card-body p-3 d-flex flex-column justify-content-between">
-                      <div>
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                          <span class="badge rounded-pill" :class="getVehicleBadgeClass(v.vehicle_type)">
-                            {{ getVehicleTypeIcon(v.vehicle_type) }} {{ v.vehicle_type }}
-                          </span>
-                          <span v-if="v.is_default" class="badge bg-primary text-white rounded-pill px-2.5">
-                            ⭐ Default Vehicle
-                          </span>
-                        </div>
+            <!-- Empty State -->
+            <div v-if="vehicles.length === 0" class="text-center py-5 bg-light rounded-4 border my-2">
+              <div class="fs-1 mb-2">🚗</div>
+              <h5 class="fw-bold text-dark">No vehicles saved in your garage</h5>
+              <p class="text-muted small mb-3" style="max-width: 440px; margin: 0 auto;">
+                Save your primary Car, SUV, EV, or Motorcycle to avoid typing registration numbers every time you park.
+              </p>
+              <button class="btn btn-primary btn-sm rounded-pill px-4 fw-semibold" @click="openAddVehicleModal">
+                ➕ Add First Vehicle
+              </button>
+            </div>
 
-                        <h4 class="fw-bold text-dark font-monospace mb-1">{{ v.license_plate }}</h4>
-                        <div class="text-primary fw-semibold small mb-2">{{ v.nickname || 'Unnamed Vehicle' }}</div>
-                        <div class="text-muted small">Registered: {{ formatTime(v.created_at) }}</div>
+            <!-- Vehicle Cards Grid -->
+            <div v-else class="row g-3 mt-1">
+              <div v-for="v in vehicles" :key="v.id" class="col-md-6 col-lg-4">
+                <div 
+                  class="card h-100 border rounded-4 transition-card shadow-xs overflow-hidden"
+                  :class="v.is_default ? 'border-primary bg-primary-subtle bg-opacity-10' : 'bg-white'"
+                >
+                  <div class="card-body p-3.5 d-flex flex-column justify-content-between">
+                    <div>
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge rounded-pill px-2.5 py-1" :class="getVehicleBadgeClass(v.vehicle_type)">
+                          {{ getVehicleTypeIcon(v.vehicle_type) }} {{ v.vehicle_type }}
+                        </span>
+                        <span v-if="v.is_default" class="badge bg-primary text-white rounded-pill px-2.5 py-1 small">
+                          ⭐ Default
+                        </span>
                       </div>
 
-                      <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top gap-1">
-                        <button 
-                          v-if="!v.is_default"
-                          class="btn btn-xs btn-outline-secondary"
-                          @click="setVehicleDefault(v)"
-                          title="Set as Default Vehicle"
-                        >
-                          ⭐ Set Default
-                        </button>
-                        <span v-else class="text-primary small fw-semibold">
-                          <i class="bi bi-check-circle-fill me-1"></i>Primary
-                        </span>
+                      <h4 class="fw-bold text-dark font-monospace mb-1">{{ v.license_plate }}</h4>
+                      <div class="text-primary fw-medium small mb-2">{{ v.nickname || 'Unnamed Vehicle' }}</div>
+                    </div>
 
-                        <div class="d-flex gap-1 ms-auto">
-                          <button class="btn btn-xs btn-outline-primary" @click="openEditVehicleModal(v)">
-                            ✏️ Edit
-                          </button>
-                          <button class="btn btn-xs btn-outline-danger" @click="deleteVehicle(v.id)">
-                            🗑️
-                          </button>
-                        </div>
+                    <!-- Action Row -->
+                    <div class="d-flex justify-content-between align-items-center mt-3 pt-2.5 border-top">
+                      <button 
+                        v-if="!v.is_default"
+                        class="btn btn-link btn-sm text-secondary p-0 text-decoration-none small"
+                        @click="setVehicleDefault(v)"
+                        title="Set as Default Vehicle"
+                      >
+                        ⭐ Set Default
+                      </button>
+                      <span v-else class="text-primary small fw-semibold">
+                        <i class="bi bi-check-circle-fill me-1"></i>Default
+                      </span>
+
+                      <div class="d-flex gap-1.5 ms-auto">
+                        <button class="btn btn-outline-secondary btn-xs rounded-pill px-2.5" @click="openEditVehicleModal(v)">
+                          ✏️ Edit
+                        </button>
+                        <button class="btn btn-outline-danger btn-xs rounded-pill px-2.5" @click="deleteVehicle(v.id)">
+                          🗑️
+                        </button>
                       </div>
                     </div>
+
                   </div>
                 </div>
               </div>
-
             </div>
+
           </div>
         </div>
 
-        <!-- ==================== TAB 2: MY RESERVATIONS ==================== -->
+        <!-- ========================================================= -->
+        <!-- TAB 3: MY RESERVATIONS & BOOKING HISTORY                  -->
+        <!-- ========================================================= -->
         <div v-if="activeTab === 'reservations'">
-          <div class="card shadow-sm border-0">
-            <div class="card-body p-4">
-              <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                <div>
-                  <h4 class="fw-bold mb-1">My Parking Reservations & Audit Trail</h4>
-                  <p class="text-muted small mb-0">Detailed location hierarchy (Venue → Floor → Spot), vehicle tags, and durations.</p>
-                </div>
-                <div class="d-flex gap-2">
-                  <button class="btn btn-outline-primary btn-sm" @click="fetchReservations">🔄 Refresh</button>
-                  <button class="btn btn-primary btn-sm" @click="handleExportCsv" :disabled="exporting">
-                    {{ exporting ? 'Generating CSV...' : 'Export as CSV' }}
-                  </button>
+          <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+            
+            <!-- Header Row -->
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+              <div>
+                <h4 class="fw-bold text-dark mb-0.5">Booking History & Sessions</h4>
+                <p class="text-muted small mb-0">Audit trail of all your past and active reservations.</p>
+              </div>
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm rounded-pill px-3" @click="fetchReservations">
+                  <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                </button>
+                <button class="btn btn-primary btn-sm rounded-pill px-3 fw-semibold shadow-xs" @click="handleExportCsv" :disabled="exporting">
+                  <i class="bi bi-download me-1"></i>
+                  <span>{{ exporting ? 'Exporting...' : 'Export CSV' }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Compact Search & Filter Row -->
+            <div class="row g-2 mb-3 bg-light p-2 rounded-3 border align-items-center">
+              <div class="col-md-5">
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                  <input 
+                    v-model="resSearchQuery" 
+                    type="text" 
+                    class="form-control border-start-0 ps-0" 
+                    placeholder="Search venue, deck, bay, or plate..."
+                  />
                 </div>
               </div>
+              <div class="col-md-4">
+                <select v-model="resVenueFilter" class="form-select form-select-sm">
+                  <option value="all">All Facilities</option>
+                  <option v-for="venue in uniqueVenues" :key="venue" :value="venue">{{ venue }}</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <select v-model="resStatusFilter" class="form-select form-select-sm">
+                  <option value="all">All Statuses</option>
+                  <option value="active">Active (Parked)</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+            </div>
 
-              <!-- Search and Filter Bar -->
-              <div class="row g-2 mb-3 bg-light p-2.5 rounded-3 border">
-                <div class="col-md-5">
-                  <div class="input-group input-group-sm">
-                    <span class="input-group-text bg-white"><i class="bi bi-search"></i> 🔍</span>
-                    <input 
-                      v-model="resSearchQuery" 
-                      type="text" 
-                      class="form-control" 
-                      placeholder="Search venue, floor, spot, license plate, or hierarchy..."
-                    />
+            <!-- Export Job Ready Notification -->
+            <div v-if="exportJob" class="alert alert-info py-2 px-3 rounded-3 d-flex justify-content-between align-items-center mb-3 small">
+              <span>Status: <strong>{{ exportJob.status }}</strong></span>
+              <a v-if="exportJob.status === 'completed'" :href="'http://localhost:5000' + exportJob.download_url" class="btn btn-xs btn-success fw-bold rounded-pill px-3" target="_blank">
+                Download CSV
+              </a>
+            </div>
+
+            <!-- Clean Reservations Table -->
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0 small">
+                <thead class="table-light">
+                  <tr>
+                    <th>#</th>
+                    <th>Facility & Location</th>
+                    <th>Vehicle</th>
+                    <th>Space</th>
+                    <th>Mode</th>
+                    <th>Entry</th>
+                    <th>Exit</th>
+                    <th>Duration</th>
+                    <th>Cost</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="res in filteredReservations" :key="res.id">
+                    <td class="text-muted">#{{ res.id }}</td>
+                    <td>
+                      <div class="fw-semibold text-dark">{{ res.venue_name || res.lot_name }}</div>
+                      <div class="text-muted x-small">
+                        Deck: {{ res.floor_name || 'Ground' }} • Bay <strong>{{ res.spot_number }}</strong>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center gap-1">
+                        <span>{{ getVehicleTypeIcon(res.vehicle_type) }}</span>
+                        <strong class="font-monospace text-dark">{{ res.vehicle_number }}</strong>
+                      </div>
+                    </td>
+                    <td>
+                      <span v-if="res.spot_type === 'handicap'" class="badge bg-info-subtle text-info">♿ Handicap</span>
+                      <span v-else class="badge bg-light text-secondary border">🚗 Regular</span>
+                    </td>
+                    <td>
+                      <span class="badge" :class="res.booking_type === 'scheduled' ? 'bg-primary-subtle text-primary' : 'bg-light text-secondary border'">
+                        {{ res.booking_type === 'scheduled' ? '📅 Advance' : '⚡ Park Now' }}
+                      </span>
+                    </td>
+                    <td class="text-secondary">{{ formatTime(res.parking_timestamp) }}</td>
+                    <td class="text-secondary">{{ res.leaving_timestamp ? formatTime(res.leaving_timestamp) : 'In Session' }}</td>
+                    <td class="fw-medium font-monospace">
+                      <span v-if="res.status === 'active'" class="text-primary">{{ getElapsed(res.parking_timestamp) }}</span>
+                      <span v-else class="text-muted">{{ res.duration_formatted || `${res.duration_hours || 1}h` }}</span>
+                    </td>
+                    <td>
+                      <strong class="text-success">₹{{ res.parking_cost ? res.parking_cost.toFixed(2) : '0.00' }}</strong>
+                      <div v-if="res.grace_period_applied" class="badge bg-success-subtle text-success x-small d-block mt-0.5">
+                        Grace (₹0)
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge" :class="res.status === 'active' ? 'bg-warning text-dark' : (res.status === 'scheduled' ? 'bg-info text-dark' : 'bg-success')">
+                        {{ res.status === 'active' ? '🟡 Active' : (res.status === 'scheduled' ? '📅 Scheduled' : '🟢 Completed') }}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        v-if="res.status === 'active' || res.status === 'scheduled'"
+                        class="btn btn-danger btn-xs rounded-pill px-2.5"
+                        @click="handleVacateSpot(res.id)"
+                      >
+                        Vacate
+                      </button>
+                      <span v-else class="text-muted x-small">Ended</span>
+                    </td>
+                  </tr>
+                  <tr v-if="filteredReservations.length === 0">
+                    <td colspan="11" class="text-center py-4 text-muted">No reservations found matching your filter.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- TAB 4: COMMUTER PASSES & SUBSCRIPTIONS                    -->
+        <!-- ========================================================= -->
+        <div v-if="activeTab === 'subscriptions'">
+          <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+            
+            <!-- Header Row -->
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+              <div>
+                <h4 class="fw-bold text-dark mb-0.5">Commuter & Corporate Passes</h4>
+                <p class="text-muted small mb-0">Recurring daily parking passes with guaranteed access and up to 35% discount.</p>
+              </div>
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm rounded-pill px-3" @click="fetchSubscriptions" :disabled="subscriptionsLoading">
+                  <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                </button>
+                <button class="btn btn-success btn-sm rounded-pill px-3 fw-semibold shadow-xs" @click="openBuyPassModal">
+                  <i class="bi bi-plus-circle me-1"></i> Buy Commuter Pass
+                </button>
+              </div>
+            </div>
+
+            <!-- Empty State -->
+            <div v-if="subscriptions.length === 0" class="text-center py-5 bg-light rounded-4 border my-2">
+              <div class="fs-1 mb-2">🎟️</div>
+              <h5 class="fw-bold text-dark">No active commuter passes</h5>
+              <p class="text-muted small mb-3" style="max-width: 440px; margin: 0 auto;">
+                Get a Monthly, Quarterly, or Annual pass for your daily workplace commute to skip repeated booking steps.
+              </p>
+              <button class="btn btn-primary btn-sm rounded-pill px-4 fw-semibold" @click="openBuyPassModal">
+                ➕ Buy Your First Pass
+              </button>
+            </div>
+
+            <!-- Passes Grid -->
+            <div v-else class="row g-3 mt-1">
+              <div v-for="sub in subscriptions" :key="'pass-' + sub.id" class="col-md-6 col-lg-4">
+                <div 
+                  class="card h-100 border rounded-4 transition-card shadow-xs overflow-hidden"
+                  :class="sub.status === 'active' ? 'border-primary bg-primary-subtle bg-opacity-10' : 'bg-white'"
+                >
+                  <div class="card-body p-3.5 d-flex flex-column justify-content-between">
+                    <div>
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge rounded-pill px-2 py-0.5" :class="sub.pass_type === 'dedicated' ? 'bg-primary' : 'bg-secondary'">
+                          {{ sub.pass_type === 'dedicated' ? '⭐ Dedicated Bay' : '🔄 Floating Access' }}
+                        </span>
+                        <span 
+                          class="badge rounded-pill px-2 py-0.5" 
+                          :class="sub.status === 'active' ? 'bg-success' : 'bg-secondary'"
+                        >
+                          {{ sub.status === 'active' ? '🟢 Active' : sub.status }}
+                        </span>
+                      </div>
+
+                      <div class="bg-dark text-white p-2 rounded-3 text-center font-monospace fw-bold mb-2.5 small">
+                        🎟️ {{ sub.pass_code }}
+                      </div>
+
+                      <h5 class="fw-bold text-dark mb-1">{{ sub.lot_name }}</h5>
+                      <div class="text-muted small mb-2.5">
+                        Deck: {{ sub.floor_name }} <span v-if="sub.spot_number !== 'Floating'">• Bay <strong>{{ sub.spot_number }}</strong></span>
+                      </div>
+
+                      <div class="bg-light p-2.5 rounded-3 small border mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                          <span class="text-muted">Vehicle Plate:</span>
+                          <strong class="font-monospace text-dark">{{ sub.vehicle_plate }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                          <span class="text-muted">Plan:</span>
+                          <span class="text-capitalize fw-semibold">{{ sub.billing_cycle }} (₹{{ sub.price }})</span>
+                        </div>
+                        <div class="d-flex justify-content-between border-top pt-1 text-primary">
+                          <span>Valid Until:</span>
+                          <strong>{{ new Date(sub.end_date).toLocaleDateString() }}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center border-top pt-2">
+                      <span class="x-small text-muted">Pass #{{ sub.id }}</span>
+                      <button 
+                        v-if="sub.status === 'active'"
+                        class="btn btn-outline-danger btn-xs rounded-pill px-2.5"
+                        @click="cancelPass(sub.id)"
+                      >
+                        Cancel Pass
+                      </button>
+                    </div>
+
                   </div>
                 </div>
-                <div class="col-md-3">
-                  <select v-model="resVenueFilter" class="form-select form-select-sm">
-                    <option value="all">All Venues / Facilities</option>
-                    <option v-for="venue in uniqueVenues" :key="venue" :value="venue">{{ venue }}</option>
-                  </select>
-                </div>
-                <div class="col-md-2">
-                  <select v-model="resStatusFilter" class="form-select form-select-sm">
-                    <option value="all">All Statuses</option>
-                    <option value="active">Active (In Use)</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </div>
-                <div class="col-md-2 text-end text-muted small d-flex align-items-center justify-content-end">
-                  Showing <strong>{{ filteredReservations.length }}</strong> of {{ reservations.length }}
-                </div>
               </div>
+            </div>
 
-              <!-- Export Job Alert / Download Pill -->
-              <div v-if="exportJob" class="alert alert-info d-flex justify-content-between align-items-center py-2 mb-3">
-                <span class="small">
-                  CSV Export Job: <strong>{{ exportJob.status }}</strong>
-                  <span v-if="exportJob.status === 'processing'"> (Batch processing in background...)</span>
-                </span>
+          </div>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- TAB 5: MONTHLY ACTIVITY REPORT                            -->
+        <!-- ========================================================= -->
+        <div v-if="activeTab === 'report'">
+          <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+            
+            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+              <div>
+                <h4 class="fw-bold text-dark mb-0.5">Monthly Activity Summary</h4>
+                <p class="text-muted small mb-0">Overview of your parking spots, expenses, and usage statistics.</p>
+              </div>
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm rounded-pill px-3" @click="fetchMonthlyReport">
+                  <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                </button>
                 <a
-                  v-if="exportJob.status === 'completed'"
-                  :href="'http://localhost:5000' + exportJob.download_url"
-                  class="btn btn-sm btn-success fw-bold"
+                  :href="'http://localhost:5000/api/reports/monthly?format=html'"
                   target="_blank"
+                  class="btn btn-success btn-sm rounded-pill px-3 fw-semibold shadow-xs"
                 >
-                  Download CSV
+                  <i class="bi bi-box-arrow-up-right me-1"></i> Open HTML Statement
                 </a>
               </div>
+            </div>
 
-              <!-- Reservations Table with Full Location Hierarchy -->
-              <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                  <thead class="table-light">
-                    <tr>
-                      <th>#</th>
-                      <th>Location Hierarchy (Venue → Floor → Spot)</th>
-                      <th>Vehicle</th>
-                      <th>Space Type</th>
-                      <th>Booking Mode</th>
-                      <th>Entry Time</th>
-                      <th>Exit Time</th>
-                      <th>Duration</th>
-                      <th>Total Cost</th>
-                      <th>Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="res in filteredReservations" :key="res.id">
-                      <td>{{ res.id }}</td>
-                      <td>
-                        <div class="fw-semibold text-dark">
-                          🏢 <span class="text-primary">{{ res.venue_name || res.lot_name }}</span>
-                          <span class="text-muted mx-1">→</span>
-                          <span class="badge bg-light text-secondary border">🏢 {{ res.floor_name || 'Ground Floor' }}</span>
-                          <span class="text-muted mx-1">→</span>
-                          <span class="badge bg-secondary font-monospace">{{ res.spot_number }}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <div class="d-flex align-items-center gap-1.5">
-                          <span>{{ getVehicleTypeIcon(res.vehicle_type) }}</span>
-                          <span class="fw-bold font-monospace">{{ res.vehicle_number }}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span v-if="res.spot_type === 'handicap'" class="badge bg-info text-dark">♿ Handicap</span>
-                        <span v-else class="badge bg-light text-dark border">🚗 Regular</span>
-                      </td>
-                      <td>
-                        <span class="badge" :class="res.booking_type === 'scheduled' ? 'bg-primary-subtle text-primary border border-primary-subtle' : 'bg-light text-secondary border'">
-                          {{ res.booking_type === 'scheduled' ? '📅 Advance' : '⚡ Park Now' }}
-                        </span>
-                      </td>
-                      <td class="small">{{ formatTime(res.parking_timestamp) }}</td>
-                      <td class="small">{{ res.leaving_timestamp ? formatTime(res.leaving_timestamp) : 'In Progress' }}</td>
-                      <td class="small fw-semibold">
-                        <span v-if="res.status === 'active'" class="text-primary font-monospace">
-                          ⏱️ {{ getElapsed(res.parking_timestamp) }}
-                        </span>
-                        <span v-else class="text-muted">
-                          {{ res.duration_formatted || `${res.duration_hours || 1}h` }}
-                        </span>
-                      </td>
-                      <td>
-                        <div class="fw-bold text-success">₹{{ res.parking_cost ? res.parking_cost.toFixed(2) : '0.00' }}</div>
-                        <div v-if="res.grace_period_applied" class="badge bg-success-subtle text-success small">
-                          ✨ 15m Grace (₹0)
-                        </div>
-                        <div v-if="res.overstay_penalty_cost > 0" class="badge bg-danger-subtle text-danger small">
-                          ⚠️ +₹{{ res.overstay_penalty_cost.toFixed(2) }} Overstay
-                        </div>
-                      </td>
-                      <td>
-                        <span class="badge" :class="res.status === 'active' ? 'bg-warning text-dark' : (res.status === 'scheduled' ? 'bg-info text-dark' : 'bg-success')">
-                          {{ res.status === 'active' ? '🟡 Active' : (res.status === 'scheduled' ? '📅 Scheduled' : '🟢 Completed') }}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          v-if="res.status === 'active' || res.status === 'scheduled'"
-                          class="btn btn-danger btn-sm"
-                          @click="handleVacateSpot(res.id)"
-                        >
-                          Vacate
-                        </button>
-                        <span v-else class="text-muted small">Released</span>
-                      </td>
-                    </tr>
-                    <tr v-if="filteredReservations.length === 0">
-                      <td colspan="11" class="text-center py-4 text-muted">No reservations found matching your search.</td>
-                    </tr>
-                  </tbody>
-                </table>
+            <!-- KPI Metric Cards -->
+            <div class="row g-3 mb-4">
+              <div class="col-md-4">
+                <div class="card bg-slate-50 border rounded-4 p-3.5">
+                  <span class="text-muted small text-uppercase fw-semibold">Spots Booked (This Month)</span>
+                  <h2 class="fw-bold text-success mb-0 mt-2">{{ monthlyReport.total_spots_booked || 0 }}</h2>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="card bg-slate-50 border rounded-4 p-3.5">
+                  <span class="text-muted small text-uppercase fw-semibold">Top Visited Facility</span>
+                  <h4 class="fw-bold text-primary mb-0 mt-2 text-truncate">{{ monthlyReport.most_used_lot || 'None' }}</h4>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="card bg-slate-50 border rounded-4 p-3.5">
+                  <span class="text-muted small text-uppercase fw-semibold">Total Amount Spent</span>
+                  <h2 class="fw-bold text-dark mb-0 mt-2">₹{{ (monthlyReport.total_amount_spent || 0).toFixed(2) }}</h2>
+                </div>
               </div>
             </div>
+
+            <!-- Embedded Report Frame -->
+            <div v-if="monthlyReport.html_content" class="border rounded-4 overflow-hidden shadow-xs">
+              <iframe
+                :srcdoc="monthlyReport.html_content"
+                style="width: 100%; height: 520px; border: none;"
+              ></iframe>
+            </div>
+
           </div>
         </div>
 
-        <!-- ==================== TAB 3: MONTHLY ACTIVITY REPORT ==================== -->
-        <div v-if="activeTab === 'report'">
-          <div class="card shadow-sm border-0 mb-4">
-            <div class="card-body p-4">
-              <div class="d-flex justify-content-between align-items-center mb-3">
-                <div>
-                  <h4 class="fw-bold mb-1">Monthly Activity Report</h4>
-                  <p class="text-muted small mb-0">Scheduled monthly summary of your parking usage and expenses.</p>
-                </div>
-                <div class="d-flex gap-2">
-                  <button class="btn btn-outline-success btn-sm" @click="fetchMonthlyReport">🔄 Refresh Report</button>
-                  <a
-                    :href="'http://localhost:5000/api/reports/monthly?format=html'"
-                    target="_blank"
-                    class="btn btn-success btn-sm"
-                  >
-                    📄 View Full HTML Report
-                  </a>
-                </div>
-              </div>
+      </main>
 
-              <!-- Summary Metrics Cards -->
-              <div class="row g-3 my-2">
-                <div class="col-md-4">
-                  <div class="card bg-light border-0 p-3">
-                    <span class="text-muted small text-uppercase fw-bold">Spots Booked (This Month)</span>
-                    <h2 class="fw-bold text-success mb-0 mt-2">{{ monthlyReport.total_spots_booked || 0 }}</h2>
-                  </div>
-                </div>
-                <div class="col-md-4">
-                  <div class="card bg-light border-0 p-3">
-                    <span class="text-muted small text-uppercase fw-bold">Most Used Parking Lot</span>
-                    <h4 class="fw-bold text-primary mb-0 mt-2">{{ monthlyReport.most_used_lot || 'None' }}</h4>
-                  </div>
-                </div>
-                <div class="col-md-4">
-                  <div class="card bg-light border-0 p-3">
-                    <span class="text-muted small text-uppercase fw-bold">Amount Spent This Month</span>
-                    <h2 class="fw-bold text-success mb-0 mt-2">₹{{ (monthlyReport.total_amount_spent || 0).toFixed(2) }}</h2>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Embedded HTML View -->
-              <div v-if="monthlyReport.html_content" class="mt-4 border rounded overflow-hidden">
-                <iframe
-                  :srcdoc="monthlyReport.html_content"
-                  style="width: 100%; height: 500px; border: none;"
-                ></iframe>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ==================== TAB 5: MY PASSES & SUBSCRIPTIONS ==================== -->
-        <div v-if="activeTab === 'subscriptions'">
-          <div class="card shadow-sm border-0 mb-4">
-            <div class="card-body p-4">
-              <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                <div>
-                  <h4 class="fw-bold mb-1 text-dark d-flex align-items-center gap-2">
-                    <span>🎟️ My Commuter & Corporate Passes</span>
-                    <span class="badge bg-primary fs-6">{{ subscriptions.length }} Passes</span>
-                  </h4>
-                  <p class="text-muted small mb-0">Long-term recurring passes for hassle-free daily parking without repeated payments.</p>
-                </div>
-                <div class="d-flex gap-2">
-                  <button class="btn btn-outline-primary btn-sm" @click="fetchSubscriptions" :disabled="subscriptionsLoading">
-                    {{ subscriptionsLoading ? 'Refreshing...' : '🔄 Refresh' }}
-                  </button>
-                  <button class="btn btn-success btn-sm fw-semibold shadow-sm" @click="openBuyPassModal">
-                    ➕ Buy Commuter Pass
-                  </button>
-                </div>
-              </div>
-
-              <!-- Passes Grid -->
-              <div v-if="subscriptions.length === 0" class="text-center py-5 bg-light rounded-4 border">
-                <div class="fs-1 mb-2">🎟️</div>
-                <h5 class="fw-bold text-dark">No active parking passes</h5>
-                <p class="text-muted small mb-3">Save up to 35% with Monthly, Quarterly, or Annual corporate & commuter passes.</p>
-                <button class="btn btn-primary btn-sm fw-semibold" @click="openBuyPassModal">
-                  ➕ Buy Your First Commuter Pass
-                </button>
-              </div>
-
-              <div v-else class="row g-3">
-                <div v-for="sub in subscriptions" :key="'pass-' + sub.id" class="col-md-6 col-lg-4">
-                  <div 
-                    class="card h-100 border transition-card shadow-sm rounded-3 overflow-hidden"
-                    :class="sub.status === 'active' ? 'border-primary border-2 bg-primary-subtle bg-opacity-10' : 'border-light-subtle bg-white'"
-                  >
-                    <div class="card-body p-3 d-flex flex-column justify-content-between">
-                      <div>
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                          <span class="badge" :class="sub.pass_type === 'dedicated' ? 'bg-primary' : 'bg-secondary'">
-                            {{ sub.pass_type === 'dedicated' ? '⭐ Dedicated Pass' : '🔄 Floating Pass' }}
-                          </span>
-                          <span 
-                            class="badge" 
-                            :class="sub.status === 'active' ? 'bg-success' : (sub.status === 'expired' ? 'bg-secondary' : 'bg-danger')"
-                          >
-                            {{ sub.status === 'active' ? '🟢 Active' : (sub.status === 'expired' ? '⚪ Expired' : '🔴 Cancelled') }}
-                          </span>
-                        </div>
-
-                        <div class="bg-dark text-white p-2 rounded-2 text-center font-monospace fw-bold mb-3 fs-6">
-                          🎟️ {{ sub.pass_code }}
-                        </div>
-
-                        <h5 class="fw-bold text-dark mb-1">{{ sub.lot_name }}</h5>
-                        <div class="text-muted small mb-2">🏢 Deck: {{ sub.floor_name }} <span v-if="sub.spot_number !== 'Floating'">• Spot: <strong>{{ sub.spot_number }}</strong></span></div>
-
-                        <div class="bg-light p-2.5 rounded-2 small border mb-2">
-                          <div class="d-flex justify-content-between mb-1">
-                            <span class="text-muted">Vehicle Plate:</span>
-                            <strong class="font-monospace">{{ sub.vehicle_plate }}</strong>
-                          </div>
-                          <div class="d-flex justify-content-between mb-1">
-                            <span class="text-muted">Plan:</span>
-                            <span class="text-capitalize fw-semibold">{{ sub.billing_cycle }} (₹{{ sub.price }})</span>
-                          </div>
-                          <div class="d-flex justify-content-between border-top pt-1 mt-1 text-primary">
-                            <span>Valid Until:</span>
-                            <strong>{{ new Date(sub.end_date).toLocaleDateString() }}</strong>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div class="mt-3 pt-2 border-top d-flex justify-content-between align-items-center">
-                        <span class="x-small text-muted">Pass ID #{{ sub.id }}</span>
-                        <button 
-                          v-if="sub.status === 'active'"
-                          class="btn btn-outline-danger btn-xs"
-                          @click="cancelPass(sub.id)"
-                        >
-                          Cancel Pass
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- ==================== BOOKING MODAL ==================== -->
+      <!-- ========================================================= -->
+      <!-- MODAL: BOOK PARKING SPOT                                  -->
+      <!-- ========================================================= -->
       <div v-if="showBookingModal" class="modal-backdrop fade show"></div>
       <div v-if="showBookingModal" class="modal show d-block" tabindex="-1">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title fw-bold">Book Parking Spot</h5>
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
+            
+            <div class="modal-header border-0 pb-0 pt-4 px-4">
+              <div>
+                <h5 class="modal-title fw-bold text-dark">Reserve Parking Spot</h5>
+                <p class="text-muted small mb-0">{{ selectedLot?.prime_location_name }} • ₹{{ selectedLot?.price }}/hr</p>
+              </div>
               <button type="button" class="btn-close" @click="showBookingModal = false"></button>
             </div>
+
             <form @submit.prevent="submitBooking">
-              <div class="modal-body">
-                <div class="p-3 bg-light rounded mb-3">
-                  <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                      <div class="fw-bold text-primary fs-5">{{ selectedLot?.prime_location_name }}</div>
-                      <div class="small text-muted">{{ selectedLot?.address }}</div>
-                    </div>
-                    <span class="badge bg-success fs-6 fw-bold px-3 py-1.5 rounded-pill">
-                      ₹{{ selectedLot?.price }}/hour
-                    </span>
-                  </div>
-                  <!-- Facility Pricing Rules Overview -->
-                  <div class="d-flex flex-wrap gap-1 mt-2 pt-2 border-top">
-                    <span class="badge bg-white text-secondary border">⏱️ {{ selectedLot?.grace_period_minutes !== undefined ? selectedLot?.grace_period_minutes : 15 }}m Free Grace</span>
-                    <span v-if="selectedLot?.daily_rate" class="badge bg-white text-success border">🛡️ ₹{{ selectedLot.daily_rate }}/day Cap</span>
-                    <span v-if="selectedLot?.overnight_rate" class="badge bg-white text-primary border">🌙 ₹{{ selectedLot.overnight_rate }} Overnight</span>
-                    <span v-if="selectedLot?.peak_multiplier > 1" class="badge bg-white text-warning border">⚡ {{ selectedLot.peak_multiplier }}x Peak Surge</span>
-                    <span class="badge bg-white text-danger border">⚠️ ₹{{ selectedLot?.overstay_penalty_rate || 50 }}/h Overstay Penalty</span>
-                  </div>
+              <div class="modal-body p-4">
+                
+                <!-- Facility Pricing Rules Strip -->
+                <div class="bg-light p-2.5 rounded-3 border mb-3 small d-flex flex-wrap gap-2 text-secondary">
+                  <span>⏱️ {{ selectedLot?.grace_period_minutes || 15 }}m Free Grace</span>
+                  <span v-if="selectedLot?.daily_rate">🛡️ ₹{{ selectedLot.daily_rate }}/day Cap</span>
+                  <span v-if="selectedLot?.overnight_rate">🌙 ₹{{ selectedLot.overnight_rate }} Night</span>
+                  <span v-if="selectedLot?.peak_multiplier > 1">⚡ {{ selectedLot.peak_multiplier }}x Surge</span>
+                  <span class="text-danger fw-semibold">⚠️ ₹{{ selectedLot?.overstay_penalty_rate || 50 }}/hr Overstay Surcharge</span>
                 </div>
 
-                <!-- Booking Mode Selector (⚡ Park Now vs 📅 Advance Pre-Booking) -->
+                <!-- Reservation Mode (Park Now vs Schedule) -->
                 <div class="mb-3">
-                  <label class="form-label fw-bold">Reservation Mode *</label>
+                  <label class="form-label small fw-bold text-dark mb-1.5">Booking Mode</label>
                   <div class="btn-group w-100" role="group">
                     <button
                       type="button"
-                      class="btn py-2 fw-semibold"
+                      class="btn btn-sm py-2 fw-semibold"
                       :class="bookingForm.booking_type === 'immediate' ? 'btn-primary' : 'btn-outline-primary'"
                       @click="bookingForm.booking_type = 'immediate'"
                     >
@@ -733,135 +879,150 @@
                     </button>
                     <button
                       type="button"
-                      class="btn py-2 fw-semibold"
+                      class="btn btn-sm py-2 fw-semibold"
                       :class="bookingForm.booking_type === 'scheduled' ? 'btn-primary' : 'btn-outline-primary'"
                       @click="bookingForm.booking_type = 'scheduled'"
                     >
-                      📅 Advance Pre-Booking
+                      📅 Schedule Advance
                     </button>
                   </div>
                 </div>
 
-                <!-- Advance Pre-Booking Date/Time Windows -->
+                <!-- Planned Duration (Hours) for Park Now Mode -->
+                <div v-if="bookingForm.booking_type === 'immediate'" class="mb-3 p-3 bg-light rounded-3 border">
+                  <div class="d-flex justify-content-between align-items-center mb-1.5">
+                    <label class="form-label small fw-bold text-dark mb-0">Select Duration (Hours) *</label>
+                    <span class="text-success fw-bold small">Est. Tariff: ₹{{ getImmediateEstimatedCost() }}</span>
+                  </div>
+
+                  <!-- Quick Hour Selection Pills -->
+                  <div class="d-flex flex-wrap gap-1.5 mb-2">
+                    <button 
+                      v-for="h in [1, 2, 3, 4, 6, 8, 12, 24]" 
+                      :key="'hr-pill-' + h"
+                      type="button" 
+                      class="btn btn-xs rounded-pill py-1 px-2.5 fw-semibold"
+                      :class="Number(bookingForm.duration_hours) === h ? 'btn-primary text-white shadow-xs' : 'btn-outline-secondary bg-white'"
+                      @click="bookingForm.duration_hours = h"
+                    >
+                      {{ h }} {{ h === 1 ? 'hr' : 'hrs' }}
+                    </button>
+                  </div>
+
+                  <!-- Custom Duration Number Input -->
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white text-muted">
+                      <i class="bi bi-clock"></i>
+                    </span>
+                    <input 
+                      v-model.number="bookingForm.duration_hours" 
+                      type="number" 
+                      min="1" 
+                      max="72" 
+                      class="form-control" 
+                      placeholder="Enter hours (e.g. 2)" 
+                      required
+                    />
+                    <span class="input-group-text bg-white text-muted">hours</span>
+                  </div>
+
+                  <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top x-small text-muted flex-wrap gap-1">
+                    <span>Valid until: <strong class="text-dark">{{ getImmediateValidUntil() }}</strong></span>
+                    <span class="text-danger fw-semibold">
+                      ⚠️ ₹{{ selectedLot?.overstay_penalty_rate || 50 }}/hr penalty if parked past this time
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Advance Scheduling Window -->
                 <div v-if="bookingForm.booking_type === 'scheduled'" class="p-3 bg-primary-subtle rounded-3 mb-3 border border-primary-subtle">
-                  <h6 class="fw-bold text-primary mb-2">📅 Schedule Future Parking Interval</h6>
                   <div class="row g-2">
                     <div class="col-sm-6">
-                      <label class="form-label small fw-semibold text-dark mb-1">Scheduled Start *</label>
-                      <input
-                        v-model="bookingForm.scheduled_start_time"
-                        type="datetime-local"
-                        class="form-control form-control-sm"
-                        required
-                      />
+                      <label class="form-label x-small fw-bold text-dark mb-1">Start Time *</label>
+                      <input v-model="bookingForm.scheduled_start_time" type="datetime-local" class="form-control form-control-sm" required />
                     </div>
                     <div class="col-sm-6">
-                      <label class="form-label small fw-semibold text-dark mb-1">Scheduled End *</label>
-                      <input
-                        v-model="bookingForm.scheduled_end_time"
-                        type="datetime-local"
-                        class="form-control form-control-sm"
-                        required
-                      />
+                      <label class="form-label x-small fw-bold text-dark mb-1">End Time *</label>
+                      <input v-model="bookingForm.scheduled_end_time" type="datetime-local" class="form-control form-control-sm" required />
                     </div>
                   </div>
-                  <!-- Dynamic Estimated Cost Widget -->
                   <div class="mt-2 pt-2 border-top border-primary-subtle d-flex justify-content-between align-items-center small">
-                    <span class="text-secondary">Estimated Duration: <strong>{{ getScheduledDurationHours() }} hrs</strong></span>
-                    <span class="text-success fw-bold fs-6">Estimated Tariff: ₹{{ getEstimatedCost() }}</span>
+                    <span class="text-secondary">Duration: <strong>{{ getScheduledDurationHours() }} hrs</strong></span>
+                    <span class="text-success fw-bold">Est. Cost: ₹{{ getEstimatedCost() }}</span>
                   </div>
-                  <div class="form-text x-small text-muted mt-1">
-                    System verifies overlapping interval collisions and reserves your spot without race conditions.
+                  <div class="mt-1.5 x-small text-danger fw-semibold">
+                    ⚠️ ₹{{ selectedLot?.overstay_penalty_rate || 50 }}/hr overstay surcharge applies after scheduled end time
                   </div>
                 </div>
 
                 <!-- Spot Type Selection: Regular or Handicap -->
                 <div class="mb-3">
-                  <label class="form-label fw-bold">Select Parking Space Type *</label>
+                  <label class="form-label small fw-bold text-dark mb-1.5">Space Type</label>
                   <div class="row g-2">
                     <div class="col-6">
                       <div 
-                        class="border rounded-3 p-3 text-center cursor-pointer h-100 transition-card"
-                        :class="{
-                          'border-success bg-success-subtle shadow-sm ring-2': bookingForm.spot_type === 'regular',
-                          'opacity-50 pointer-events-none': (selectedLot?.regular_available_spots || 0) <= 0
-                        }"
+                        class="border rounded-3 p-2.5 text-center cursor-pointer transition-card"
+                        :class="bookingForm.spot_type === 'regular' ? 'border-success bg-success-subtle shadow-xs' : 'bg-light'"
                         @click="(selectedLot?.regular_available_spots || 0) > 0 && (bookingForm.spot_type = 'regular')"
                       >
-                        <div class="fs-3 mb-1">🚗</div>
-                        <div class="fw-bold text-dark">Regular Space</div>
-                        <span class="badge" :class="(selectedLot?.regular_available_spots || 0) > 0 ? 'bg-success' : 'bg-secondary'">
-                          {{ selectedLot?.regular_available_spots || 0 }} Available
-                        </span>
+                        <div class="fs-4 mb-0.5">🚗</div>
+                        <div class="fw-bold small text-dark">Regular Bay</div>
+                        <span class="badge bg-success small">{{ selectedLot?.regular_available_spots || 0 }} Free</span>
                       </div>
                     </div>
                     <div class="col-6">
                       <div 
-                        class="border rounded-3 p-3 text-center cursor-pointer h-100 transition-card"
-                        :class="{
-                          'border-info bg-info-subtle shadow-sm ring-2': bookingForm.spot_type === 'handicap',
-                          'opacity-50 pointer-events-none': (selectedLot?.handicap_available_spots || 0) <= 0
-                        }"
+                        class="border rounded-3 p-2.5 text-center cursor-pointer transition-card"
+                        :class="bookingForm.spot_type === 'handicap' ? 'border-info bg-info-subtle shadow-xs' : 'bg-light'"
                         @click="(selectedLot?.handicap_available_spots || 0) > 0 && (bookingForm.spot_type = 'handicap')"
                       >
-                        <div class="fs-3 mb-1">♿</div>
-                        <div class="fw-bold text-dark">Handicap Space</div>
-                        <span class="badge" :class="(selectedLot?.handicap_available_spots || 0) > 0 ? 'bg-info text-dark' : 'bg-secondary'">
-                          {{ selectedLot?.handicap_available_spots || 0 }} Available
-                        </span>
+                        <div class="fs-4 mb-0.5">♿</div>
+                        <div class="fw-bold small text-dark">Handicap Bay</div>
+                        <span class="badge bg-info text-dark small">{{ selectedLot?.handicap_available_spots || 0 }} Free</span>
                       </div>
                     </div>
                   </div>
-                  <div class="form-text small mt-1">
-                    Users can select standard 4-wheeler parking or dedicated handicap accessible parking.
-                  </div>
                 </div>
 
-                <!-- Multi-Floor Selection (Optional Preference) -->
+                <!-- Optional Preferred Floor -->
                 <div v-if="selectedLot?.floors && selectedLot.floors.length > 1" class="mb-3">
-                  <label class="form-label fw-bold">Select Preferred Floor (Optional)</label>
-                  <select v-model="bookingForm.floor_id" class="form-select">
-                    <option :value="null">Any Floor (Lowest Level First)</option>
+                  <label class="form-label small fw-bold text-dark mb-1">Preferred Deck (Optional)</label>
+                  <select v-model="bookingForm.floor_id" class="form-select form-select-sm">
+                    <option :value="null">Auto-Assign (Lowest / Nearest to Exit First)</option>
                     <option v-for="fl in selectedLot.floors" :key="'modal-fl-' + fl.id" :value="fl.id">
-                      🏢 {{ fl.floor_name }} ({{ fl.available_spots }} spots available)
+                      🏢 {{ fl.floor_name }} ({{ fl.available_spots }} spots free)
                     </option>
                   </select>
-                  <div class="form-text small">Multi-deck facility: pick a specific deck or let system auto-assign nearest to entrance.</div>
                 </div>
 
-                <!-- Vehicle Selection from Garage or Custom -->
+                <!-- Vehicle Selection -->
                 <div class="mb-3">
-                  <div class="d-flex justify-content-between align-items-center mb-1">
-                    <label class="form-label fw-bold mb-0">Select Vehicle *</label>
-                    <span v-if="vehicles.length > 0" class="small text-muted">Pick from saved garage</span>
-                  </div>
-
-                  <!-- Quick Garage Selector Pills -->
-                  <div v-if="vehicles.length > 0" class="d-flex flex-wrap gap-2 mb-2">
+                  <label class="form-label small fw-bold text-dark mb-1">Vehicle Details *</label>
+                  
+                  <!-- Garage Chips -->
+                  <div v-if="vehicles.length > 0" class="d-flex flex-wrap gap-1.5 mb-2">
                     <button 
                       v-for="v in vehicles" 
                       :key="'garage-select-' + v.id"
                       type="button"
-                      class="btn btn-sm rounded-pill text-start py-1 px-3"
-                      :class="bookingForm.vehicle_id === v.id ? 'btn-primary text-white shadow-sm' : 'btn-outline-secondary bg-white'"
+                      class="btn btn-xs rounded-pill py-1 px-2.5"
+                      :class="bookingForm.vehicle_id === v.id ? 'btn-primary text-white shadow-xs' : 'btn-outline-secondary bg-white'"
                       @click="selectGarageVehicle(v)"
                     >
-                      <span>{{ getVehicleTypeIcon(v.vehicle_type) }} <strong>{{ v.license_plate }}</strong></span>
-                      <span v-if="v.nickname" class="small opacity-75 ms-1">({{ v.nickname }})</span>
+                      {{ getVehicleTypeIcon(v.vehicle_type) }} <strong>{{ v.license_plate }}</strong>
                     </button>
                     <button 
                       type="button" 
-                      class="btn btn-sm rounded-pill py-1 px-3"
+                      class="btn btn-xs rounded-pill py-1 px-2.5"
                       :class="bookingForm.vehicle_id === null ? 'btn-dark text-white' : 'btn-outline-dark bg-white'"
                       @click="bookingForm.vehicle_id = null"
                     >
-                      ➕ Custom Plate
+                      + Custom Plate
                     </button>
                   </div>
 
-                  <!-- License Plate Input (editable if custom or auto-filled from garage) -->
-                  <div class="input-group">
-                    <span class="input-group-text bg-light fw-bold font-monospace">
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light fw-bold">
                       {{ getVehicleTypeIcon(bookingForm.vehicle_type) }}
                     </span>
                     <input
@@ -871,7 +1032,7 @@
                       placeholder="e.g. MH-02-CB-1234"
                       required
                     />
-                    <select v-model="bookingForm.vehicle_type" class="form-select" style="max-width: 140px;">
+                    <select v-model="bookingForm.vehicle_type" class="form-select" style="max-width: 120px;">
                       <option value="Car">🚗 Car</option>
                       <option value="SUV">🚙 SUV</option>
                       <option value="EV">⚡ EV</option>
@@ -879,60 +1040,53 @@
                     </select>
                   </div>
 
-                  <!-- Option to save to garage if typing a new custom plate -->
-                  <div v-if="bookingForm.vehicle_id === null" class="form-check mt-2 small">
-                    <input 
-                      v-model="bookingForm.save_to_garage" 
-                      class="form-check-input" 
-                      type="checkbox" 
-                      id="saveToGarageCheck"
-                    />
+                  <div v-if="bookingForm.vehicle_id === null" class="form-check mt-1.5 small">
+                    <input v-model="bookingForm.save_to_garage" class="form-check-input" type="checkbox" id="saveToGarageCheck" />
                     <label class="form-check-label text-muted" for="saveToGarageCheck">
-                      Save this vehicle to <strong>My Garage</strong> for 1-click booking next time
+                      Save to My Garage for next time
                     </label>
                   </div>
                 </div>
 
-                <div class="mb-3">
-                  <label class="form-label">Remarks (Optional)</label>
-                  <input
-                    v-model="bookingForm.remarks"
-                    type="text"
-                    class="form-control"
-                    placeholder="e.g. Blue Sedan, Gate 2"
-                  />
+                <!-- Remarks -->
+                <div class="mb-2">
+                  <label class="form-label small text-muted mb-1">Remarks (Optional)</label>
+                  <input v-model="bookingForm.remarks" type="text" class="form-control form-control-sm" placeholder="e.g. Blue Sedan, Gate 2" />
                 </div>
 
-                <div class="alert alert-secondary small mb-0">
-                  ℹ️ The system will automatically allocate the optimal available {{ bookingForm.spot_type }} spot.
-                </div>
               </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" @click="showBookingModal = false">Cancel</button>
-                <button type="submit" class="btn btn-success" :disabled="bookingSubmitting">
-                  {{ bookingSubmitting ? 'Allotting Spot...' : 'Confirm & Book Spot' }}
+
+              <div class="modal-footer border-0 pt-0 pb-4 px-4">
+                <button type="button" class="btn btn-light btn-sm rounded-pill px-3" @click="showBookingModal = false">Cancel</button>
+                <button type="submit" class="btn btn-success btn-sm rounded-pill px-4 fw-semibold shadow-xs" :disabled="bookingSubmitting">
+                  {{ bookingSubmitting ? 'Allotting Spot...' : 'Confirm & Reserve Spot' }}
                 </button>
               </div>
             </form>
+
           </div>
         </div>
       </div>
 
-      <!-- ==================== VEHICLE MODAL (ADD / EDIT) ==================== -->
+      <!-- ========================================================= -->
+      <!-- MODAL: ADD / EDIT VEHICLE                                 -->
+      <!-- ========================================================= -->
       <div v-if="showVehicleModal" class="modal-backdrop fade show"></div>
       <div v-if="showVehicleModal" class="modal show d-block" tabindex="-1">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title fw-bold">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
+            <div class="modal-header border-0 pb-0 pt-4 px-4">
+              <h5 class="modal-title fw-bold text-dark">
                 {{ vehicleModalMode === 'edit' ? '✏️ Edit Vehicle Profile' : '➕ Add Vehicle to Garage' }}
               </h5>
               <button type="button" class="btn-close" @click="showVehicleModal = false"></button>
             </div>
+            
             <form @submit.prevent="saveVehicle">
-              <div class="modal-body">
+              <div class="modal-body p-4">
+                
                 <div class="mb-3">
-                  <label class="form-label fw-bold">License Plate Number *</label>
+                  <label class="form-label small fw-bold text-dark">License Plate Number *</label>
                   <input
                     v-model="vehicleForm.license_plate"
                     type="text"
@@ -940,74 +1094,73 @@
                     placeholder="e.g. DL-01-AB-1234"
                     required
                   />
-                  <div class="form-text small">Enter registration / number plate.</div>
                 </div>
 
                 <div class="mb-3">
-                  <label class="form-label fw-bold">Vehicle Nickname / Alias</label>
+                  <label class="form-label small fw-bold text-dark">Vehicle Nickname</label>
                   <input
                     v-model="vehicleForm.nickname"
                     type="text"
                     class="form-control"
-                    placeholder="e.g. Daily Commuter, Family Car, Red Sedan"
+                    placeholder="e.g. Daily Commuter, Red SUV"
                   />
-                  <div class="form-text small">Helpful label to identify which car or bike this is.</div>
                 </div>
 
                 <div class="mb-3">
-                  <label class="form-label fw-bold">Vehicle Type *</label>
+                  <label class="form-label small fw-bold text-dark">Vehicle Type *</label>
                   <div class="row g-2">
                     <div v-for="type in ['Car', 'SUV', 'EV', 'Motorcycle']" :key="type" class="col-6 col-sm-3">
                       <div 
-                        class="border rounded-3 p-2 text-center cursor-pointer h-100"
-                        :class="vehicleForm.vehicle_type === type ? 'border-primary bg-primary-subtle shadow-sm ring-2' : 'bg-light'"
+                        class="border rounded-3 p-2 text-center cursor-pointer"
+                        :class="vehicleForm.vehicle_type === type ? 'border-primary bg-primary-subtle shadow-xs' : 'bg-light'"
                         @click="vehicleForm.vehicle_type = type"
                       >
                         <div class="fs-4">{{ getVehicleTypeIcon(type) }}</div>
-                        <div class="small fw-bold mt-1">{{ type }}</div>
+                        <div class="small fw-semibold mt-1">{{ type }}</div>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <div class="form-check mt-3">
-                  <input 
-                    v-model="vehicleForm.is_default" 
-                    class="form-check-input" 
-                    type="checkbox" 
-                    id="vehicleDefaultCheck"
-                  />
-                  <label class="form-check-label fw-semibold" for="vehicleDefaultCheck">
-                    Set as Default Vehicle (automatically pre-selected when booking)
+                  <input v-model="vehicleForm.is_default" class="form-check-input" type="checkbox" id="vehicleDefaultCheck" />
+                  <label class="form-check-label small fw-medium" for="vehicleDefaultCheck">
+                    Set as default vehicle for quick booking
                   </label>
                 </div>
+
               </div>
 
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" @click="showVehicleModal = false">Cancel</button>
-                <button type="submit" class="btn btn-primary fw-semibold" :disabled="savingVehicle">
-                  {{ savingVehicle ? 'Saving...' : (vehicleModalMode === 'edit' ? 'Update Vehicle' : 'Save to Garage') }}
+              <div class="modal-footer border-0 pt-0 pb-4 px-4">
+                <button type="button" class="btn btn-light btn-sm rounded-pill px-3" @click="showVehicleModal = false">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm rounded-pill px-4 fw-semibold" :disabled="savingVehicle">
+                  {{ savingVehicle ? 'Saving...' : (vehicleModalMode === 'edit' ? 'Update Vehicle' : 'Save Vehicle') }}
                 </button>
               </div>
             </form>
+
           </div>
         </div>
       </div>
 
-      <!-- ==================== PURCHASE PASS MODAL ==================== -->
+      <!-- ========================================================= -->
+      <!-- MODAL: BUY COMMUTER PASS                                  -->
+      <!-- ========================================================= -->
       <div v-if="showPassModal" class="modal-backdrop fade show"></div>
       <div v-if="showPassModal" class="modal show d-block" tabindex="-1">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title fw-bold">🎟️ Purchase Recurring Commuter Pass</h5>
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
+            <div class="modal-header border-0 pb-0 pt-4 px-4">
+              <h5 class="modal-title fw-bold text-dark">🎟️ Buy Commuter Pass</h5>
               <button type="button" class="btn-close" @click="showPassModal = false"></button>
             </div>
+
             <form @submit.prevent="submitBuyPass">
-              <div class="modal-body">
+              <div class="modal-body p-4">
+                
                 <div class="mb-3">
-                  <label class="form-label fw-bold">Select Parking Facility *</label>
-                  <select v-model="passForm.lot_id" class="form-select" required>
+                  <label class="form-label small fw-bold text-dark">Select Facility *</label>
+                  <select v-model="passForm.lot_id" class="form-select form-select-sm" required>
                     <option value="" disabled>-- Select a Parking Lot --</option>
                     <option v-for="lot in lots" :key="'lot-pass-' + lot.id" :value="lot.id">
                       🏢 {{ lot.prime_location_name }} (₹{{ lot.price }}/hr base)
@@ -1016,39 +1169,39 @@
                 </div>
 
                 <div class="mb-3">
-                  <label class="form-label fw-bold">Pass Type *</label>
+                  <label class="form-label small fw-bold text-dark">Pass Type *</label>
                   <div class="row g-2">
                     <div class="col-6">
                       <div 
-                        class="border rounded-3 p-3 text-center cursor-pointer h-100 transition-card"
-                        :class="passForm.pass_type === 'floating' ? 'border-primary bg-primary-subtle ring-2' : 'bg-light'"
+                        class="border rounded-3 p-2.5 text-center cursor-pointer"
+                        :class="passForm.pass_type === 'floating' ? 'border-primary bg-primary-subtle' : 'bg-light'"
                         @click="passForm.pass_type = 'floating'"
                       >
                         <div class="fs-4 mb-1">🔄</div>
-                        <div class="fw-bold">Floating Pass</div>
-                        <small class="text-muted">Guaranteed spot anywhere in lot</small>
+                        <div class="fw-bold small">Floating Pass</div>
+                        <div class="x-small text-muted">Guaranteed bay anywhere</div>
                       </div>
                     </div>
                     <div class="col-6">
                       <div 
-                        class="border rounded-3 p-3 text-center cursor-pointer h-100 transition-card"
-                        :class="passForm.pass_type === 'dedicated' ? 'border-primary bg-primary-subtle ring-2' : 'bg-light'"
+                        class="border rounded-3 p-2.5 text-center cursor-pointer"
+                        :class="passForm.pass_type === 'dedicated' ? 'border-primary bg-primary-subtle' : 'bg-light'"
                         @click="passForm.pass_type = 'dedicated'"
                       >
                         <div class="fs-4 mb-1">⭐</div>
-                        <div class="fw-bold">Dedicated Bay</div>
-                        <small class="text-muted">Private dedicated reserved bay</small>
+                        <div class="fw-bold small">Dedicated Bay</div>
+                        <div class="x-small text-muted">Private assigned spot</div>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <div class="mb-3">
-                  <label class="form-label fw-bold">Billing Cycle *</label>
+                  <label class="form-label small fw-bold text-dark">Billing Cycle *</label>
                   <div class="btn-group w-100" role="group">
                     <button
                       type="button"
-                      class="btn py-2 fw-semibold"
+                      class="btn btn-sm py-1.5 fw-semibold"
                       :class="passForm.billing_cycle === 'monthly' ? 'btn-primary' : 'btn-outline-primary'"
                       @click="passForm.billing_cycle = 'monthly'"
                     >
@@ -1056,7 +1209,7 @@
                     </button>
                     <button
                       type="button"
-                      class="btn py-2 fw-semibold"
+                      class="btn btn-sm py-1.5 fw-semibold"
                       :class="passForm.billing_cycle === 'quarterly' ? 'btn-primary' : 'btn-outline-primary'"
                       @click="passForm.billing_cycle = 'quarterly'"
                     >
@@ -1064,7 +1217,7 @@
                     </button>
                     <button
                       type="button"
-                      class="btn py-2 fw-semibold"
+                      class="btn btn-sm py-1.5 fw-semibold"
                       :class="passForm.billing_cycle === 'annual' ? 'btn-primary' : 'btn-outline-primary'"
                       @click="passForm.billing_cycle = 'annual'"
                     >
@@ -1074,8 +1227,8 @@
                 </div>
 
                 <div class="mb-3">
-                  <label class="form-label fw-bold">Vehicle Registration Plate *</label>
-                  <div class="input-group">
+                  <label class="form-label small fw-bold text-dark">Vehicle Plate *</label>
+                  <div class="input-group input-group-sm">
                     <input
                       v-model="passForm.vehicle_plate"
                       type="text"
@@ -1083,7 +1236,7 @@
                       placeholder="e.g. DL-01-AB-1234"
                       required
                     />
-                    <select v-model="passForm.vehicle_type" class="form-select" style="max-width: 130px;">
+                    <select v-model="passForm.vehicle_type" class="form-select" style="max-width: 120px;">
                       <option value="Car">🚗 Car</option>
                       <option value="SUV">🚙 SUV</option>
                       <option value="EV">⚡ EV</option>
@@ -1094,22 +1247,24 @@
 
                 <div class="p-3 bg-light rounded-3 d-flex justify-content-between align-items-center border">
                   <div>
-                    <div class="small text-muted">Pass Total Amount</div>
+                    <div class="x-small text-muted">Total Pass Price:</div>
                     <div class="fw-bold fs-5 text-success">₹{{ computeEstimatedPassPrice() }}</div>
                   </div>
-                  <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
+                  <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1.5 rounded-pill">
                     Instant Activation
                   </span>
                 </div>
+
               </div>
 
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" @click="showPassModal = false">Cancel</button>
-                <button type="submit" class="btn btn-success fw-bold" :disabled="purchasingPass">
-                  {{ purchasingPass ? 'Activating Pass...' : 'Confirm & Activate Pass' }}
+              <div class="modal-footer border-0 pt-0 pb-4 px-4">
+                <button type="button" class="btn btn-light btn-sm rounded-pill px-3" @click="showPassModal = false">Cancel</button>
+                <button type="submit" class="btn btn-success btn-sm rounded-pill px-4 fw-bold shadow-xs" :disabled="purchasingPass">
+                  {{ purchasingPass ? 'Activating Pass...' : 'Confirm & Activate' }}
                 </button>
               </div>
             </form>
+
           </div>
         </div>
       </div>
@@ -1160,6 +1315,7 @@ export default {
       selectedLot: null,
       bookingForm: {
         booking_type: 'immediate',
+        duration_hours: 2,
         scheduled_start_time: '',
         scheduled_end_time: '',
         vehicle_id: null,
@@ -1189,16 +1345,30 @@ export default {
         vehicle_type: 'Car'
       },
       lotSearchQuery: '',
+      activeQuickFilter: 'all',
       eventSource: null
     }
   },
   computed: {
     filteredLots() {
+      let list = this.lots || []
+
+      // Quick filter
+      if (this.activeQuickFilter === 'available') {
+        list = list.filter(lot => (lot.available_spots || 0) > 0)
+      } else if (this.activeQuickFilter === 'budget') {
+        list = list.filter(lot => (lot.price || 0) <= 50)
+      } else if (this.activeQuickFilter === 'handicap') {
+        list = list.filter(lot => (lot.handicap_spots || 0) > 0)
+      } else if (this.activeQuickFilter === 'multi_deck') {
+        list = list.filter(lot => (lot.floor_count || (lot.floors ? lot.floors.length : 1)) > 1)
+      }
+
       if (!this.lotSearchQuery || !this.lotSearchQuery.trim()) {
-        return this.lots
+        return list
       }
       const q = this.lotSearchQuery.toLowerCase().trim()
-      return this.lots.filter(lot => {
+      return list.filter(lot => {
         const nameMatch = lot.prime_location_name && lot.prime_location_name.toLowerCase().includes(q)
         const addrMatch = lot.address && lot.address.toLowerCase().includes(q)
         const pinMatch = lot.pin_code && String(lot.pin_code).toLowerCase().includes(q)
@@ -1309,6 +1479,14 @@ export default {
         return `${seconds}s`
       }
     },
+    isOverstaying(res) {
+      if (!res || !res.scheduled_end_time || res.status !== 'active') return false
+      const safeStr = (res.scheduled_end_time.endsWith('Z') || res.scheduled_end_time.includes('+')) 
+        ? res.scheduled_end_time 
+        : `${res.scheduled_end_time}Z`
+      const end = new Date(safeStr).getTime()
+      return !isNaN(end) && this.nowTimestamp > end
+    },
     getRunningCost(res) {
       if (!res.parking_timestamp) return '0.00'
       const safeStr = (res.parking_timestamp.endsWith('Z') || res.parking_timestamp.includes('+')) 
@@ -1318,7 +1496,21 @@ export default {
       if (isNaN(start)) return '0.00'
       const diffHours = Math.max(1, (this.nowTimestamp - start) / 3600000)
       const price = res.price_per_hour || res.lot_price || 0
-      return (diffHours * price).toFixed(2)
+      let total = diffHours * price
+
+      // Add overstay penalty surcharge if past scheduled end time
+      if (this.isOverstaying(res)) {
+        const endSafe = (res.scheduled_end_time.endsWith('Z') || res.scheduled_end_time.includes('+'))
+          ? res.scheduled_end_time
+          : `${res.scheduled_end_time}Z`
+        const end = new Date(endSafe).getTime()
+        if (!isNaN(end) && this.nowTimestamp > end) {
+          const overstayHours = Math.max(1.0, (this.nowTimestamp - end) / 3600000)
+          const penaltyRate = res.overstay_penalty_rate || 50.0
+          total += overstayHours * penaltyRate
+        }
+      }
+      return total.toFixed(2)
     },
     openRegister() {
       this.registerSuccessMessage = ''
@@ -1351,6 +1543,7 @@ export default {
       this.lots = []
       this.subscriptions = []
       this.lotSearchQuery = ''
+      this.activeQuickFilter = 'all'
     },
     showAlert(msg, type = 'success') {
       this.alertMessage = msg
@@ -1366,7 +1559,7 @@ export default {
     async fetchLots(searchQuery = null) {
       try {
         const params = {}
-        const q = searchQuery !== null ? searchQuery : (this.lotSearchQuery ? this.lotSearchQuery.trim() : '')
+        const q = typeof searchQuery === 'string' ? searchQuery.trim() : (this.lotSearchQuery ? this.lotSearchQuery.trim() : '')
         if (q) {
           params.search = q
         }
@@ -1394,21 +1587,19 @@ export default {
         ? 'regular'
         : (lot.handicap_available_spots > 0 ? 'handicap' : 'regular')
       
-      // Capture the exact local time when the booking is selected
       const now = new Date()
       const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 
-      // Default scheduled start to 1 hour from now, end to 4 hours from now
       const startSched = new Date(now.getTime() + 60 * 60 * 1000)
       const endSched = new Date(now.getTime() + 4 * 60 * 60 * 1000)
       const startSchedIso = new Date(startSched.getTime() - startSched.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
       const endSchedIso = new Date(endSched.getTime() - endSched.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 
-      // Auto-select default vehicle from garage if available
       const defVehicle = this.vehicles.find(v => v.is_default) || this.vehicles[0] || null
 
       this.bookingForm = {
         booking_type: 'immediate',
+        duration_hours: 2,
         scheduled_start_time: startSchedIso,
         scheduled_end_time: endSchedIso,
         vehicle_id: defVehicle ? defVehicle.id : null,
@@ -1422,6 +1613,23 @@ export default {
         parking_timestamp: localIso
       }
       this.showBookingModal = true
+    },
+    getImmediateEstimatedCost() {
+      if (!this.selectedLot) return '0.00'
+      const hours = Math.max(1, Number(this.bookingForm.duration_hours) || 1)
+      const hourly = this.selectedLot.price || 0
+      let total = hours * hourly
+      if (this.selectedLot.daily_rate && this.selectedLot.daily_rate > 0) {
+        const days = Math.max(1, hours / 24.0)
+        const dailyCap = days * this.selectedLot.daily_rate
+        if (total > dailyCap) total = dailyCap
+      }
+      return total.toFixed(2)
+    },
+    getImmediateValidUntil() {
+      const hours = Math.max(1, Number(this.bookingForm.duration_hours) || 2)
+      const d = new Date(Date.now() + hours * 3600000)
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     },
     getScheduledDurationHours() {
       if (!this.bookingForm.scheduled_start_time || !this.bookingForm.scheduled_end_time) return 0
@@ -1547,14 +1755,16 @@ export default {
       if (!this.bookingForm.vehicle_number.trim()) return
       this.bookingSubmitting = true
       try {
-        // In "Park Now" (immediate), entry time is automatically captured as current time
+        const durationHours = Math.max(1, Number(this.bookingForm.duration_hours) || 2)
+        const now = new Date()
         const isoTimestamp = this.bookingForm.booking_type === 'immediate'
-          ? new Date().toISOString()
-          : (this.bookingForm.scheduled_start_time ? new Date(this.bookingForm.scheduled_start_time).toISOString() : new Date().toISOString())
+          ? now.toISOString()
+          : (this.bookingForm.scheduled_start_time ? new Date(this.bookingForm.scheduled_start_time).toISOString() : now.toISOString())
 
         const payload = {
           lot_id: this.selectedLot.id,
           booking_type: this.bookingForm.booking_type,
+          duration_hours: durationHours,
           vehicle_id: this.bookingForm.vehicle_id,
           vehicle_number: this.bookingForm.vehicle_number.trim(),
           vehicle_type: this.bookingForm.vehicle_type || 'Car',
@@ -1566,7 +1776,10 @@ export default {
           parking_timestamp: isoTimestamp
         }
 
-        if (this.bookingForm.booking_type === 'scheduled') {
+        if (this.bookingForm.booking_type === 'immediate') {
+          const end = new Date(now.getTime() + durationHours * 3600000)
+          payload.scheduled_end_time = end.toISOString()
+        } else if (this.bookingForm.booking_type === 'scheduled') {
           const sDate = new Date(this.bookingForm.scheduled_start_time)
           const eDate = new Date(this.bookingForm.scheduled_end_time)
           if (isNaN(sDate.getTime()) || isNaN(eDate.getTime()) || eDate <= sDate) {
@@ -1576,6 +1789,7 @@ export default {
           }
           payload.scheduled_start_time = sDate.toISOString()
           payload.scheduled_end_time = eDate.toISOString()
+          payload.duration_hours = Math.max(1, Math.round(((eDate - sDate) / 3600000) * 10) / 10)
         }
 
         const res = await axios.post('http://localhost:5000/api/reservations', payload, this.getAuthHeaders())
@@ -1729,7 +1943,6 @@ export default {
       }
     },
     handleRealtimeSpotUpdate(data) {
-      // Refresh lot availability counts in real time
       this.fetchLots()
       if (this.activeTab === 'reservations' || this.activeTab === 'dashboard') {
         this.fetchReservations()
@@ -1740,15 +1953,136 @@ export default {
 </script>
 
 <style scoped>
+.user-portal-root {
+  background-color: #f8fafc;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+
+.bg-slate-50 {
+  background-color: #f8fafc;
+}
+
+.bg-slate-100 {
+  background-color: #f1f5f9;
+}
+
+.max-w-1400 {
+  max-width: 1400px;
+}
+
+.brand-icon-box {
+  width: 32px;
+  height: 32px;
+}
+
+.avatar-circle {
+  width: 26px;
+  height: 26px;
+  font-size: 0.75rem;
+}
+
+.shadow-xs {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.tracking-tight {
+  letter-spacing: -0.02em;
+}
+
+/* Tab Navigation Styling */
+.user-nav-tabs .nav-link {
+  color: #64748b;
+  background: transparent;
+  transition: all 0.18s ease;
+}
+
+.user-nav-tabs .nav-link:hover {
+  color: #0f172a;
+  background-color: #f1f5f9;
+}
+
+.user-nav-tabs .nav-link.active {
+  color: #ffffff;
+  background-color: #198754;
+  box-shadow: 0 2px 6px rgba(25, 135, 84, 0.25);
+}
+
+/* Card Transitions */
+.transition-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.transition-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06) !important;
+}
+
+.active-session-card {
+  border-left: 4px solid #198754 !important;
+}
+
+/* Pulsing Dots */
+.pulse-dot-green {
+  width: 8px;
+  height: 8px;
+  background-color: #198754;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7);
+  animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(25, 135, 84, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0); }
+}
+
+.pulse-dot-warning {
+  width: 7px;
+  height: 7px;
+  background-color: #ffc107;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7);
+  animation: pulse-warning 2s infinite;
+}
+
+@keyframes pulse-warning {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(255, 193, 7, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.btn-xs {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.x-small {
+  font-size: 0.75rem;
+}
+
+.whitespace-nowrap {
+  white-space: nowrap;
+}
+
+/* Modal Backdrops */
 .modal-backdrop {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(2px);
   z-index: 1040;
 }
+
 .modal {
   z-index: 1050;
 }

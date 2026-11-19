@@ -5,64 +5,86 @@
 
     <!-- Authenticated View: Company Portal Dashboard -->
     <div v-else>
-      <!-- Navigation Bar -->
-      <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm px-4">
-        <div class="container-fluid">
-          <div class="d-flex align-items-center gap-2">
-            <span class="fs-4">🏢</span>
-            <span class="navbar-brand fw-bold mb-0">Company Operator Portal</span>
-            <span class="badge bg-light text-primary fw-semibold ms-2">
-              {{ companyUser.company_name || 'Parking Operator' }}
+      <!-- Top Navigation Bar -->
+      <header class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top py-2.5 px-3 px-md-4 shadow-xs">
+        <div class="container-fluid px-0">
+          <div class="d-flex align-items-center gap-2.5">
+            <router-link to="/" class="d-flex align-items-center gap-2 text-decoration-none text-dark">
+              <div class="brand-icon-box bg-indigo text-white rounded-3 d-flex align-items-center justify-content-center shadow-xs">
+                <i class="bi bi-building-fill fs-5"></i>
+              </div>
+              <span class="fw-bold fs-5 tracking-tight">Smart<span class="text-indigo">Park</span></span>
+            </router-link>
+            <span class="badge bg-indigo-subtle text-indigo border border-indigo-subtle px-2.5 py-1 rounded-pill small fw-medium">
+              <i class="bi bi-shield-check me-1"></i> Operator Portal
+            </span>
+            <span v-if="companyUser.company_name" class="badge bg-light text-secondary border px-2.5 py-1 rounded-pill small fw-semibold d-none d-lg-inline-block">
+              {{ companyUser.company_name }}
             </span>
           </div>
 
-          <div class="d-flex align-items-center gap-3">
-            <span class="text-white-50 small d-none d-md-inline">
-              User: <strong class="text-white">{{ companyUser.name || companyUser.username }}</strong>
-            </span>
+          <div class="d-flex align-items-center gap-2 gap-md-3 ms-auto">
+            <!-- Operator Profile Chip -->
+            <div class="d-flex align-items-center gap-2 bg-light border rounded-pill py-1 px-2.5 text-secondary">
+              <div class="avatar-circle bg-indigo text-white rounded-circle d-flex align-items-center justify-content-center fw-bold small">
+                {{ (companyUser.company_name || companyUser.username || 'O').charAt(0).toUpperCase() }}
+              </div>
+              <span class="small fw-semibold text-dark d-none d-md-inline">{{ companyUser.name || companyUser.username }}</span>
+            </div>
             
             <!-- Profile Button -->
-            <button class="btn btn-outline-light btn-sm fw-semibold shadow-sm" @click="openProfileModal">
-              <i class="bi bi-person-gear me-1"></i> Profile
+            <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1 fw-medium" @click="openProfileModal" title="Edit Company Profile">
+              <i class="bi bi-gear me-1"></i>
+              <span class="d-none d-sm-inline">Profile</span>
             </button>
             
             <!-- Logout Button -->
-            <button class="btn btn-danger btn-sm fw-semibold shadow-sm" @click="logout">
-              <i class="bi bi-box-arrow-right me-1"></i> Logout
+            <button class="btn btn-outline-danger btn-sm rounded-pill px-3 py-1 fw-medium" @click="logout" title="Sign out of portal">
+              <i class="bi bi-box-arrow-right me-1"></i>
+              <span class="d-none d-sm-inline">Sign Out</span>
             </button>
           </div>
         </div>
-      </nav>
+      </header>
 
       <!-- Company Portal Navigation Tab Bar -->
-      <div class="bg-white border-bottom px-4 shadow-xs">
-        <div class="max-w-1400">
-          <ul class="nav nav-tabs border-0 pt-2">
+      <div class="bg-white border-bottom px-3 px-md-4">
+        <div class="max-w-1400 mx-auto">
+          <ul class="nav nav-pills gap-1 py-2 company-nav-tabs">
             <li class="nav-item">
               <button
-                class="nav-link"
+                class="nav-link py-1.5 px-3 rounded-pill fw-semibold small d-flex align-items-center gap-1.5"
                 :class="{ active: activeTab === 'facilities' }"
                 @click="activeTab = 'facilities'"
               >
-                🅿️ Facilities & Grid Management
+                <i class="bi bi-building"></i>
+                <span>Facilities & Spaces</span>
+                <span v-if="lots.length" class="badge rounded-pill ms-1" :class="activeTab === 'facilities' ? 'bg-white text-dark' : 'bg-secondary-subtle text-secondary'">
+                  {{ lots.length }}
+                </span>
               </button>
             </li>
             <li class="nav-item">
               <button
-                class="nav-link"
+                class="nav-link py-1.5 px-3 rounded-pill fw-semibold small d-flex align-items-center gap-1.5"
                 :class="{ active: activeTab === 'analytics' }"
                 @click="activeTab = 'analytics'"
               >
-                📈 Facility Analytics & Heatmaps
+                <i class="bi bi-graph-up-arrow"></i>
+                <span>Yield & Analytics</span>
               </button>
             </li>
             <li class="nav-item">
               <button
-                class="nav-link"
+                class="nav-link py-1.5 px-3 rounded-pill fw-semibold small d-flex align-items-center gap-1.5"
                 :class="{ active: activeTab === 'subscriptions' }"
                 @click="activeTab = 'subscriptions'"
               >
-                🎟️ Subscriptions & Passes
+                <i class="bi bi-ticket-perforated"></i>
+                <span>Passes & Subscriptions</span>
+                <span v-if="subscriptions.length" class="badge rounded-pill ms-1" :class="activeTab === 'subscriptions' ? 'bg-white text-dark' : 'bg-primary-subtle text-primary'">
+                  {{ subscriptions.length }}
+                </span>
               </button>
             </li>
           </ul>
@@ -70,9 +92,9 @@
       </div>
 
       <!-- Main Container -->
-      <div class="container-fluid p-4 max-w-1400">
+      <div class="container-fluid p-3 p-md-4 max-w-1400 mx-auto">
         <!-- Global Feedback Alert -->
-        <div v-if="alertMessage" class="alert alert-dismissible fade show mb-4 shadow-sm" :class="'alert-' + alertType">
+        <div v-if="alertMessage" class="alert alert-dismissible fade show mb-4 rounded-3 shadow-xs" :class="'alert-' + alertType">
           <i class="bi me-2" :class="alertType === 'success' ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'"></i>
           {{ alertMessage }}
           <button type="button" class="btn-close" @click="alertMessage = ''"></button>
@@ -84,111 +106,205 @@
         <!-- Dashboard Header & Top Stats -->
         <div class="row g-3 mb-4">
           <div class="col-md-3 col-sm-6">
-            <div class="card shadow-sm border-0 border-start border-primary border-4 h-100">
-              <div class="card-body">
-                <span class="text-muted small fw-semibold text-uppercase">Total Facilities</span>
-                <h3 class="fw-bold mb-0 text-primary mt-1">{{ stats.total_lots || 0 }}</h3>
-                <small class="text-muted">Managed parking spaces</small>
+            <div class="card shadow-xs border-0 rounded-4 p-3 bg-white h-100">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small fw-semibold text-uppercase">Facilities</span>
+                <div class="stat-icon-circle bg-indigo-subtle text-indigo rounded-3">
+                  <i class="bi bi-building"></i>
+                </div>
               </div>
+              <h3 class="fw-bold mb-0 text-dark">{{ stats.total_lots || 0 }}</h3>
+              <small class="text-muted mt-1 d-block">Managed locations</small>
             </div>
           </div>
           <div class="col-md-3 col-sm-6">
-            <div class="card shadow-sm border-0 border-start border-success border-4 h-100">
-              <div class="card-body">
-                <span class="text-muted small fw-semibold text-uppercase">Total Slots</span>
-                <h3 class="fw-bold mb-0 text-success mt-1">{{ stats.total_spots || 0 }}</h3>
-                <small class="text-muted">
-                  🚗 {{ stats.regular_spots || 0 }} Regular | ♿ {{ stats.handicap_spots || 0 }} Handicap
-                </small>
+            <div class="card shadow-xs border-0 rounded-4 p-3 bg-white h-100">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small fw-semibold text-uppercase">Total Capacity</span>
+                <div class="stat-icon-circle bg-success-subtle text-success rounded-3">
+                  <i class="bi bi-p-square"></i>
+                </div>
               </div>
+              <h3 class="fw-bold mb-0 text-dark">{{ stats.total_spots || 0 }}</h3>
+              <small class="text-muted mt-1 d-block">
+                🚗 {{ stats.regular_spots || 0 }} Reg • ♿ {{ stats.handicap_spots || 0 }} Handi
+              </small>
             </div>
           </div>
           <div class="col-md-3 col-sm-6">
-            <div class="card shadow-sm border-0 border-start border-info border-4 h-100">
-              <div class="card-body">
+            <div class="card shadow-xs border-0 rounded-4 p-3 bg-white h-100">
+              <div class="d-flex align-items-center justify-content-between mb-2">
                 <span class="text-muted small fw-semibold text-uppercase">Live Availability</span>
-                <h3 class="fw-bold mb-0 text-info mt-1">{{ stats.available_spots || 0 }} <span class="fs-6 text-muted">/ {{ stats.total_spots || 0 }}</span></h3>
-                <small class="text-muted">🔴 {{ stats.occupied_spots || 0 }} Currently Occupied</small>
+                <div class="stat-icon-circle bg-info-subtle text-info-emphasis rounded-3">
+                  <i class="bi bi-speedometer2"></i>
+                </div>
               </div>
+              <h3 class="fw-bold mb-0 text-dark">
+                {{ stats.available_spots || 0 }} 
+                <span class="fs-6 text-muted fw-normal">/ {{ stats.total_spots || 0 }}</span>
+              </h3>
+              <small class="text-muted mt-1 d-block">
+                🔴 {{ stats.occupied_spots || 0 }} Occupied currently
+              </small>
             </div>
           </div>
           <div class="col-md-3 col-sm-6">
-            <div class="card shadow-sm border-0 border-start border-warning border-4 h-100">
-              <div class="card-body">
-                <span class="text-muted small fw-semibold text-uppercase">Active Bookings & Revenue</span>
-                <h3 class="fw-bold mb-0 text-dark mt-1">₹{{ (stats.total_revenue || 0).toFixed(2) }}</h3>
-                <small class="text-warning-emphasis fw-semibold">{{ stats.active_reservations || 0 }} Active session(s)</small>
+            <div class="card shadow-xs border-0 rounded-4 p-3 bg-white h-100">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small fw-semibold text-uppercase">Active Revenue</span>
+                <div class="stat-icon-circle bg-warning-subtle text-warning-emphasis rounded-3">
+                  <i class="bi bi-currency-rupee"></i>
+                </div>
               </div>
+              <h3 class="fw-bold mb-0 text-dark">₹{{ (stats.total_revenue || 0).toFixed(2) }}</h3>
+              <small class="text-warning-emphasis fw-semibold mt-1 d-block">
+                {{ stats.active_reservations || 0 }} active session(s)
+              </small>
             </div>
           </div>
         </div>
 
-        <!-- Section Header & Actions -->
-        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-          <div>
-            <h4 class="fw-bold text-dark mb-1">Parking Spaces & Slot Grid Management</h4>
-            <p class="text-muted small mb-0">Design interactive slot layouts, mark handicap bays, configure tariffs, and manage facilities.</p>
+        <!-- Section Header, Search & Filter Bar -->
+        <div class="card border-0 shadow-xs rounded-4 bg-white p-3 mb-4">
+          <div class="row g-2 align-items-center">
+            
+            <!-- Search Input -->
+            <div class="col-md-6 col-lg-5">
+              <div class="input-group">
+                <span class="input-group-text bg-light border-0 text-muted ps-3 pe-2 rounded-start-pill">
+                  <i class="bi bi-search text-indigo"></i>
+                </span>
+                <input
+                  v-model="lotSearchQuery"
+                  type="text"
+                  class="form-control bg-light border-0 shadow-none ps-1 fs-6 rounded-end-pill"
+                  placeholder="Search facilities by name, address, or PIN..."
+                  @keydown.esc="lotSearchQuery = ''"
+                />
+                <button
+                  v-if="lotSearchQuery"
+                  class="btn btn-link text-muted border-0 pe-3 text-decoration-none"
+                  type="button"
+                  @click="lotSearchQuery = ''"
+                  title="Clear search"
+                >
+                  <i class="bi bi-x-circle-fill text-secondary"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Action Controls -->
+            <div class="col-md-6 col-lg-7 d-flex align-items-center justify-content-md-end gap-2 flex-wrap">
+              <span class="badge bg-light text-secondary border py-2 px-3 rounded-pill fw-normal">
+                Showing <strong>{{ filteredLots.length }}</strong> of {{ lots.length }}
+              </span>
+              <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1.5 fw-medium" @click="fetchDashboard">
+                <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+              </button>
+              <button class="btn btn-primary btn-sm rounded-pill px-3 py-1.5 fw-semibold shadow-xs" @click="openCreateModal">
+                <i class="bi bi-plus-circle me-1"></i> New Facility
+              </button>
+            </div>
+
           </div>
-          <div class="d-flex gap-2">
-            <button class="btn btn-outline-primary btn-sm fw-semibold" @click="fetchDashboard">
-              <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+
+          <!-- Quick Filters Strip -->
+          <div class="d-flex align-items-center gap-1.5 mt-3 pt-2.5 border-top flex-wrap">
+            <span class="x-small text-muted fw-semibold me-1"><i class="bi bi-funnel-fill me-1"></i>Filter:</span>
+            <button 
+              class="btn btn-xs rounded-pill px-2.5 py-1 fw-medium transition-all"
+              :class="activeLotFilter === 'all' ? 'btn-dark text-white shadow-xs' : 'btn-outline-secondary bg-white'"
+              @click="activeLotFilter = 'all'"
+            >
+              All Facilities
             </button>
-            <button class="btn btn-primary btn-sm fw-semibold shadow-sm" @click="openCreateModal">
-              <i class="bi bi-plus-circle me-1"></i> Create New Parking Space
+            <button 
+              class="btn btn-xs rounded-pill px-2.5 py-1 fw-medium transition-all"
+              :class="activeLotFilter === 'available' ? 'btn-success text-white shadow-xs' : 'btn-outline-secondary bg-white'"
+              @click="activeLotFilter = 'available'"
+            >
+              🟢 Has Available Slots
+            </button>
+            <button 
+              class="btn btn-xs rounded-pill px-2.5 py-1 fw-medium transition-all"
+              :class="activeLotFilter === 'multideck' ? 'btn-indigo text-white shadow-xs' : 'btn-outline-secondary bg-white'"
+              @click="activeLotFilter = 'multideck'"
+            >
+              🏢 Multi-Floor
+            </button>
+            <button
+              v-if="lotSearchQuery || activeLotFilter !== 'all'"
+              class="btn btn-xs btn-link text-danger text-decoration-none ms-auto fw-semibold"
+              @click="lotSearchQuery = ''; activeLotFilter = 'all'"
+            >
+              Reset Filters
+            </button>
+          </div>
+        </div>
+
+        <!-- Empty State: No Facilities Matching -->
+        <div v-if="filteredLots.length === 0" class="card text-center py-5 shadow-xs border-0 rounded-4 bg-white my-4">
+          <div class="card-body py-4">
+            <div class="fs-1 text-muted mb-2">🅿️</div>
+            <h5 class="fw-bold text-dark">
+              {{ lots.length === 0 ? 'No parking spaces created yet' : 'No facilities match your search' }}
+            </h5>
+            <p class="text-muted small mb-3" style="max-width: 480px; margin: 0 auto;">
+              {{ lots.length === 0 
+                ? 'Click "New Facility" above to add your first parking facility and design its interactive grid layout.' 
+                : 'Try adjusting your search query or reset the filters.' 
+              }}
+            </p>
+            <button v-if="lots.length === 0" class="btn btn-primary rounded-pill px-4" @click="openCreateModal">
+              Create First Facility
+            </button>
+            <button v-else class="btn btn-primary btn-sm rounded-pill px-4 fw-semibold" @click="lotSearchQuery = ''; activeLotFilter = 'all'">
+              Reset Search & Filters
             </button>
           </div>
         </div>
 
         <!-- Lots Cards Grid -->
-        <div v-if="lots.length === 0" class="card text-center py-5 shadow-sm border-0">
-          <div class="card-body">
-            <div class="fs-1 text-muted mb-2">🅿️</div>
-            <h5 class="fw-bold text-muted">No parking spaces created yet</h5>
-            <p class="text-muted small">Click "Create New Parking Space" above to add your first parking facility and design its grid layout.</p>
-            <button class="btn btn-primary" @click="openCreateModal">Create Parking Space</button>
-          </div>
-        </div>
-
-        <div class="row g-4">
-          <div v-for="lot in lots" :key="lot.id" class="col-lg-6 col-xl-4">
-            <div class="card shadow-sm h-100 border-0 rounded-4 overflow-hidden lot-card">
-              <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
+        <div v-else class="row g-3 g-md-4">
+          <div v-for="lot in filteredLots" :key="lot.id" class="col-lg-6 col-xl-4">
+            <div class="card shadow-sm h-100 border-0 rounded-4 overflow-hidden lot-card transition-card bg-white">
+              <div class="card-header bg-white border-bottom p-3.5 d-flex justify-content-between align-items-center">
                 <div>
-                  <h5 class="fw-bold text-primary mb-0">{{ lot.prime_location_name }}</h5>
-                  <small class="text-muted"><i class="bi bi-geo-alt me-1"></i>{{ lot.address }} (PIN: {{ lot.pin_code }})</small>
+                  <h5 class="fw-bold text-dark mb-0.5">{{ lot.prime_location_name }}</h5>
+                  <small class="text-muted"><i class="bi bi-geo-alt me-1 text-danger"></i>{{ lot.address }} • PIN {{ lot.pin_code }}</small>
                 </div>
-                <span class="badge bg-success-subtle text-success fs-6 fw-bold px-3 py-1.5 rounded-pill">
+                <span class="badge bg-success-subtle text-success fs-6 fw-bold px-3 py-1.5 rounded-pill border border-success-subtle">
                   ₹{{ lot.price }}/hr
                 </span>
               </div>
 
-              <div class="card-body p-4 d-flex flex-column">
-                <!-- Slot Stats Badges -->
+              <div class="card-body p-3.5 d-flex flex-column">
+                <!-- Slot Capacity & Breakdown -->
                 <div class="row g-2 mb-3">
                   <div class="col-6">
                     <div class="bg-light p-2.5 rounded-3 border text-center">
-                      <div class="small text-muted">🚗 Regular Slots</div>
+                      <div class="x-small text-muted">🚗 Regular Slots</div>
                       <div class="fw-bold fs-5 text-dark">{{ lot.regular_spots }}</div>
-                      <span class="badge bg-success-subtle text-success small">{{ lot.regular_available }} Available</span>
+                      <span class="badge bg-success-subtle text-success small">{{ lot.regular_available }} Free</span>
                     </div>
                   </div>
                   <div class="col-6">
                     <div class="bg-light p-2.5 rounded-3 border text-center">
-                      <div class="small text-muted">♿ Handicap Slots</div>
+                      <div class="x-small text-muted">♿ Handicap Slots</div>
                       <div class="fw-bold fs-5 text-primary">{{ lot.handicap_spots }}</div>
-                      <span class="badge bg-info-subtle text-info-emphasis small">{{ lot.handicap_available }} Available</span>
+                      <span class="badge bg-info-subtle text-info-emphasis small">{{ lot.handicap_available }} Free</span>
                     </div>
                   </div>
                 </div>
 
-                <!-- Floor Selector / Indicator -->
-                <div class="d-flex justify-content-between align-items-center p-2 px-3 bg-secondary-subtle rounded-3 mb-2 small text-secondary">
-                  <span><i class="bi bi-layers-fill me-1"></i> Multi-Floor Facility:</span>
-                  <strong>🏢 {{ lot.floor_count || (lot.floors ? lot.floors.length : 1) }} Floor{{ (lot.floor_count || 1) > 1 ? 's' : '' }} ({{ lot.number_of_spots }} Total Slots)</strong>
+                <!-- Multi-Floor Indicator -->
+                <div class="d-flex justify-content-between align-items-center p-2 px-3 bg-light rounded-3 mb-2 small text-secondary border">
+                  <span><i class="bi bi-layers-fill text-indigo me-1"></i> Multi-Floor Facility:</span>
+                  <strong class="text-dark">🏢 {{ lot.floor_count || (lot.floors ? lot.floors.length : 1) }} Floor{{ (lot.floor_count || 1) > 1 ? 's' : '' }} ({{ lot.number_of_spots }} Slots)</strong>
                 </div>
 
                 <!-- Dynamic & Tiered Pricing Policy Badges -->
-                <div class="d-flex flex-wrap gap-1 mb-2">
+                <div class="d-flex flex-wrap gap-1 mb-3">
                   <span class="badge bg-light text-secondary border">⏱️ {{ lot.grace_period_minutes !== undefined ? lot.grace_period_minutes : 15 }}m Grace</span>
                   <span v-if="lot.daily_rate" class="badge bg-light text-success border">🛡️ ₹{{ lot.daily_rate }}/day</span>
                   <span v-if="lot.overnight_rate" class="badge bg-light text-primary border">🌙 ₹{{ lot.overnight_rate }} Night</span>
@@ -198,7 +314,7 @@
 
                 <!-- Mini Grid Preview Thumbnail with Floor Selector -->
                 <div v-if="getLotPreviewFloor(lot)" class="mini-grid-container mb-3 p-2 bg-light rounded-3 border">
-                  <div class="small text-muted mb-1 fw-semibold d-flex justify-content-between align-items-center">
+                  <div class="small text-muted mb-1.5 fw-semibold d-flex justify-content-between align-items-center">
                     <span class="d-flex align-items-center gap-1">
                       <span>Floor:</span>
                       <select 
@@ -238,17 +354,16 @@
 
                 <!-- Actions: Edit Slots Button & Delete -->
                 <div class="mt-auto pt-2 d-flex gap-2">
-                  <!-- The REQUIRED extra button: "Edit Slots" -->
                   <button 
-                    class="btn btn-primary flex-grow-1 fw-semibold shadow-sm d-flex align-items-center justify-content-center gap-2 py-2"
+                    class="btn btn-primary flex-grow-1 fw-semibold shadow-xs d-flex align-items-center justify-content-center gap-2 py-2 rounded-3"
                     @click="openEditSlotsModal(lot)"
                   >
                     <i class="bi bi-grid-fill"></i>
-                    <span>Edit Slots</span>
+                    <span>Edit Slots & Grid</span>
                   </button>
 
                   <button 
-                    class="btn btn-outline-danger btn-sm px-3"
+                    class="btn btn-outline-danger btn-sm px-3 rounded-3"
                     @click="deleteLot(lot)"
                     title="Delete parking space"
                   >
@@ -564,12 +679,14 @@
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
           <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             
-            <div class="modal-header bg-primary text-white p-3 px-4">
-              <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-grid-3x3-gap-fill fs-4"></i>
+            <div class="modal-header bg-dark text-white p-3.5 px-4 border-0">
+              <div class="d-flex align-items-center gap-2.5">
+                <div class="stat-icon-circle bg-white text-dark rounded-3" style="width: 32px; height: 32px; font-size: 1rem;">
+                  <i class="bi bi-grid-3x3-gap-fill"></i>
+                </div>
                 <div>
-                  <h5 class="modal-title fw-bold mb-0">Edit Slots & Parking Grid</h5>
-                  <small class="text-white-50">Configure slot names, hourly tariff, grid dimensions, and clickable space elements</small>
+                  <h5 class="modal-title fw-bold mb-0">Edit Slots & Facility Layout</h5>
+                  <small class="text-white-50">Configure dimensions, clickable space elements, and dynamic tariffs</small>
                 </div>
               </div>
               <button type="button" class="btn-close btn-close-white" @click="closeEditSlotsModal"></button>
@@ -972,8 +1089,11 @@
       <div v-if="showProfileModal" class="modal show d-block" tabindex="-1">
         <div class="modal-dialog">
           <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-            <div class="modal-header bg-primary text-white p-3 px-4">
-              <h5 class="modal-title fw-bold">Company Profile Settings</h5>
+            <div class="modal-header bg-dark text-white p-3.5 px-4 border-0">
+              <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-building-gear fs-5"></i>
+                <h5 class="modal-title fw-bold mb-0">Company Profile Settings</h5>
+              </div>
               <button type="button" class="btn-close btn-close-white" @click="showProfileModal = false"></button>
             </div>
             <form @submit.prevent="updateCompanyProfile">
@@ -1059,8 +1179,11 @@
       <div v-if="showCreateModal" class="modal show d-block" tabindex="-1">
         <div class="modal-dialog">
           <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-            <div class="modal-header bg-primary text-white p-3 px-4">
-              <h5 class="modal-title fw-bold">Create New Parking Space</h5>
+            <div class="modal-header bg-dark text-white p-3.5 px-4 border-0">
+              <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-plus-circle-fill fs-5"></i>
+                <h5 class="modal-title fw-bold mb-0">Create New Parking Facility</h5>
+              </div>
               <button type="button" class="btn-close btn-close-white" @click="showCreateModal = false"></button>
             </div>
             <form @submit.prevent="createParkingSpace">
@@ -1210,6 +1333,8 @@ export default {
       subscriptionsLoading: false,
       eventSource: null,
       realtimePulsingSpots: {},
+      lotSearchQuery: '',
+      activeLotFilter: 'all',
       editSlotForm: {
         prime_location_name: '',
         price: 0,
@@ -1218,6 +1343,27 @@ export default {
     }
   },
   computed: {
+    filteredLots() {
+      let list = this.lots || []
+
+      // Quick filter
+      if (this.activeLotFilter === 'available') {
+        list = list.filter(lot => (lot.available_spots || 0) > 0)
+      } else if (this.activeLotFilter === 'multideck') {
+        list = list.filter(lot => (lot.floor_count || (lot.floors ? lot.floors.length : 1)) > 1)
+      }
+
+      if (!this.lotSearchQuery || !this.lotSearchQuery.trim()) {
+        return list
+      }
+      const q = this.lotSearchQuery.toLowerCase().trim()
+      return list.filter(lot => {
+        const nameMatch = lot.prime_location_name && lot.prime_location_name.toLowerCase().includes(q)
+        const addrMatch = lot.address && lot.address.toLowerCase().includes(q)
+        const pinMatch = lot.pin_code && String(lot.pin_code).toLowerCase().includes(q)
+        return nameMatch || addrMatch || pinMatch
+      })
+    },
     currentFloor() {
       if (this.editSlotForm.floors && this.editSlotForm.floors.length > 0) {
         return this.editSlotForm.floors[this.activeFloorIdx] || this.editSlotForm.floors[0]
@@ -1346,6 +1492,8 @@ export default {
       this.companyUser = {}
       this.lots = []
       this.stats = {}
+      this.lotSearchQuery = ''
+      this.activeLotFilter = 'all'
     },
     showAlert(msg, type = 'success') {
       this.alertMessage = msg
@@ -1672,7 +1820,12 @@ export default {
         const res = await axios.get('http://localhost:5000/api/company/analytics', this.getAuthHeaders())
         this.analyticsData = res.data
       } catch (err) {
-        this.showAlert(err.response?.data?.error || 'Failed to load facility analytics', 'danger')
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          this.showAlert(err.response?.data?.msg || err.response?.data?.error || 'Operator session expired. Please sign in again.', 'danger')
+          this.logout()
+        } else {
+          this.showAlert(err.response?.data?.error || err.response?.data?.msg || 'Failed to load facility analytics', 'danger')
+        }
       } finally {
         this.analyticsLoading = false
       }
@@ -1683,7 +1836,12 @@ export default {
         const res = await axios.get('http://localhost:5000/api/company/subscriptions', this.getAuthHeaders())
         this.subscriptions = res.data.subscriptions || []
       } catch (err) {
-        this.showAlert(err.response?.data?.error || 'Failed to load subscriptions', 'danger')
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          this.showAlert(err.response?.data?.msg || err.response?.data?.error || 'Operator session expired. Please sign in again.', 'danger')
+          this.logout()
+        } else {
+          this.showAlert(err.response?.data?.error || err.response?.data?.msg || 'Failed to load subscriptions', 'danger')
+        }
       } finally {
         this.subscriptionsLoading = false
       }
@@ -1765,11 +1923,99 @@ export default {
 <style scoped>
 .company-wrapper {
   background-color: #f8fafc;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
 .max-w-1400 {
   max-width: 1400px;
   margin: 0 auto;
+}
+
+/* Indigo Palette Helpers */
+.bg-indigo {
+  background-color: #4f46e5 !important;
+}
+
+.text-indigo {
+  color: #4f46e5 !important;
+}
+
+.bg-indigo-subtle {
+  background-color: #eef2ff !important;
+}
+
+.border-indigo-subtle {
+  border-color: #c7d2fe !important;
+}
+
+.btn-indigo {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+  border: none;
+}
+
+.btn-indigo:hover {
+  background-color: #4338ca !important;
+  color: #ffffff !important;
+}
+
+.brand-icon-box {
+  width: 32px;
+  height: 32px;
+}
+
+.avatar-circle {
+  width: 28px;
+  height: 28px;
+  font-size: 0.8rem;
+}
+
+.stat-icon-circle {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+}
+
+.shadow-xs {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.tracking-tight {
+  letter-spacing: -0.02em;
+}
+
+.transition-all {
+  transition: all 0.18s ease;
+}
+
+.transition-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.transition-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.07) !important;
+}
+
+/* Company Pill Tabs Navigation */
+.company-nav-tabs .nav-link {
+  color: #64748b;
+  background: transparent;
+  transition: all 0.18s ease;
+}
+
+.company-nav-tabs .nav-link:hover {
+  color: #0f172a;
+  background-color: #f1f5f9;
+}
+
+.company-nav-tabs .nav-link.active {
+  color: #ffffff;
+  background-color: #4f46e5;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
 }
 
 .lot-card {

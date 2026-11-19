@@ -145,7 +145,7 @@
                 <h4 class="fw-bold mb-0 text-dark">Live Facility Grid & Spot Status</h4>
                 <p class="text-muted small mb-0">Visual layout rendering of roads, regular bays, handicap bays, stairs, and empty slots.</p>
               </div>
-              <button class="btn btn-outline-primary btn-sm fw-semibold" @click="fetchDashboard">
+              <button class="btn btn-outline-primary btn-sm fw-semibold" @click="fetchDashboard()">
                 <i class="bi bi-arrow-clockwise me-1"></i> Refresh Grid
               </button>
             </div>
@@ -1099,7 +1099,7 @@ export default {
     async fetchDashboard(searchQuery = null) {
       try {
         const params = {}
-        const q = searchQuery !== null ? searchQuery : (this.dashboardSearchQuery ? this.dashboardSearchQuery.trim() : '')
+        const q = typeof searchQuery === 'string' ? searchQuery.trim() : (this.dashboardSearchQuery ? this.dashboardSearchQuery.trim() : '')
         if (q) params.search = q
         const res = await axios.get('http://localhost:5000/api/admin/dashboard', {
           headers: this.getAuthHeaders().headers,
@@ -1116,7 +1116,7 @@ export default {
     async fetchLots(searchQuery = null) {
       try {
         const params = {}
-        const q = searchQuery !== null ? searchQuery : (this.lotsSearchQuery ? this.lotsSearchQuery.trim() : '')
+        const q = typeof searchQuery === 'string' ? searchQuery.trim() : (this.lotsSearchQuery ? this.lotsSearchQuery.trim() : '')
         if (q) params.search = q
         const res = await axios.get('http://localhost:5000/api/parking-lots', { params })
         this.lots = res.data.parking_lots
@@ -1272,7 +1272,12 @@ export default {
         const res = await axios.get('http://localhost:5000/api/admin/analytics', this.getAuthHeaders())
         this.analyticsData = res.data
       } catch (err) {
-        this.showAlert(err.response?.data?.error || 'Failed to load analytics', 'danger')
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          this.showAlert(err.response?.data?.msg || err.response?.data?.error || 'Admin session expired. Please sign in again.', 'danger')
+          this.logout()
+        } else {
+          this.showAlert(err.response?.data?.error || err.response?.data?.msg || 'Failed to load analytics', 'danger')
+        }
       } finally {
         this.analyticsLoading = false
       }
@@ -1283,7 +1288,12 @@ export default {
         const res = await axios.get('http://localhost:5000/api/admin/subscriptions', this.getAuthHeaders())
         this.subscriptions = res.data.subscriptions || []
       } catch (err) {
-        this.showAlert(err.response?.data?.error || 'Failed to load subscriptions', 'danger')
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          this.showAlert(err.response?.data?.msg || err.response?.data?.error || 'Admin session expired. Please sign in again.', 'danger')
+          this.logout()
+        } else {
+          this.showAlert(err.response?.data?.error || err.response?.data?.msg || 'Failed to load subscriptions', 'danger')
+        }
       } finally {
         this.subscriptionsLoading = false
       }

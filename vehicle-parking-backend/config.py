@@ -12,7 +12,7 @@ SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 # JWT Configuration
 JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'jwt-secret-key-change-in-production'
-JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
+JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=7)
 
 # Debug mode
 DEBUG = True

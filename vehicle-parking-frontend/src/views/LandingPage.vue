@@ -1,83 +1,85 @@
 <template>
   <div class="landing-page-root">
     
-    <!-- Top Navigation -->
+    <!-- Top Navigation Header -->
     <header class="navbar navbar-expand-lg navbar-light bg-white border-bottom py-3 sticky-top shadow-sm">
       <div class="container">
-        <router-link to="/" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-dark fs-4">
+        <!-- Brand Logo -->
+        <router-link to="/" class="navbar-brand d-flex align-items-center gap-2 fw-bold text-dark fs-4 text-decoration-none">
           <div class="brand-icon-box bg-success text-white rounded-3 d-flex align-items-center justify-content-center shadow-sm">
             <i class="bi bi-p-square-fill fs-5"></i>
           </div>
-          <span>Smart<span class="text-success">Park</span></span>
+          <span class="tracking-tight">Smart<span class="text-success">Park</span></span>
         </router-link>
 
-        <div class="d-flex align-items-center gap-2">
-          <router-link to="/user" class="btn btn-outline-success btn-sm fw-semibold rounded-pill px-3">
-            <i class="bi bi-car-front-fill me-1"></i> User Portal
+        <!-- Navbar Links & Login Buttons (User, Company, Admin) -->
+        <div class="d-flex align-items-center gap-2 ms-auto">
+          <!-- User / Driver Portal Button -->
+          <router-link to="/user" class="btn btn-success btn-sm fw-semibold rounded-pill px-3 shadow-sm d-flex align-items-center gap-1.5">
+            <i class="bi bi-car-front-fill"></i>
+            <span>Driver Portal</span>
           </router-link>
-          <router-link to="/company" class="btn btn-primary btn-sm fw-semibold rounded-pill px-3 shadow-sm">
-            <i class="bi bi-building me-1"></i> Company Portal
+
+          <!-- Company Portal Button -->
+          <router-link to="/company" class="btn btn-outline-primary btn-sm fw-semibold rounded-pill px-3 d-flex align-items-center gap-1.5">
+            <i class="bi bi-building"></i>
+            <span>Company Portal</span>
           </router-link>
-          <router-link to="/admin" class="btn btn-outline-secondary btn-sm fw-semibold rounded-pill px-3 d-none d-md-inline-block">
-            <i class="bi bi-shield-lock-fill me-1"></i> Admin
+
+          <!-- Admin Portal Button -->
+          <router-link to="/admin" class="btn btn-outline-secondary btn-sm fw-semibold rounded-pill px-3 d-flex align-items-center gap-1.5">
+            <i class="bi bi-shield-lock-fill"></i>
+            <span>Admin</span>
           </router-link>
         </div>
       </div>
     </header>
 
-    <!-- Hero Section -->
+    <!-- Hero Section (100% User / Driver Focused) -->
     <section class="hero-section text-center py-5 px-3 position-relative overflow-hidden">
       <div class="container py-4">
         
-        
+        <!-- Trust Pill Badge -->
+        <div class="d-inline-flex align-items-center gap-2 bg-success-subtle border border-success-subtle text-success-emphasis rounded-pill px-3 py-1.5 mb-3 small fw-semibold">
+          <span class="pulse-dot"></span>
+          <span>Live Multi-Deck Real-Time Parking Availability</span>
+        </div>
 
         <!-- Main Headline -->
         <h1 class="hero-headline fw-bolder text-dark mb-3 display-4">
-          Effortless Parking for Drivers, <br class="d-none d-md-inline">
-          <span class="gradient-text">Complete Control for Companies</span>
+          Smart, Seamless Parking <br class="d-none d-md-inline">
+          <span class="gradient-text">Reserved in Seconds.</span>
         </h1>
 
         <!-- Subtitle -->
         <p class="hero-subtext text-secondary mx-auto mb-4 lead" style="max-width: 720px;">
-          Reserve regular or handicap accessible parking spaces instantly. Empower parking facility operators to design interactive slot grids, customize tariffs, and streamline physical space operations.
+          Never circle for parking again. Search nearby parking spaces, check real-time multi-deck availability, lock in regular or handicap bays, and enjoy contactless digital passes.
         </p>
 
-        <!-- CTA Buttons -->
-        <div class="d-flex justify-content-center gap-3 flex-wrap mb-5">
-          <router-link to="/user" class="btn btn-success btn-lg px-4 py-2.5 rounded-pill fw-semibold shadow d-flex align-items-center gap-2">
-            <i class="bi bi-geo-alt-fill"></i>
-            <span>Find & Book Parking</span>
-          </router-link>
-          <router-link to="/company" class="btn btn-primary btn-lg px-4 py-2.5 rounded-pill fw-semibold shadow d-flex align-items-center gap-2">
-            <i class="bi bi-grid-3x3-gap-fill"></i>
-            <span>Company Slot Designer</span>
-          </router-link>
-        </div>
-
-        <!-- Quick Platform Stats Pill Strip -->
-        <div class="row g-3 justify-content-center max-w-900 mx-auto">
-          <div class="col-6 col-md-3">
-            <div class="stat-pill bg-white border rounded-4 p-3 shadow-sm text-center">
-              <div class="fs-4 fw-bold text-success">100%</div>
-              <div class="small text-muted fw-semibold">Auto-Allotment</div>
-            </div>
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="stat-pill bg-white border rounded-4 p-3 shadow-sm text-center">
-              <div class="fs-4 fw-bold text-primary">♿ Accessible</div>
-              <div class="small text-muted fw-semibold">Handicap Bays</div>
-            </div>
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="stat-pill bg-white border rounded-4 p-3 shadow-sm text-center">
-              <div class="fs-4 fw-bold text-dark">Interactive</div>
-              <div class="small text-muted fw-semibold">Clickable Grid</div>
-            </div>
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="stat-pill bg-white border rounded-4 p-3 shadow-sm text-center">
-              <div class="fs-4 fw-bold text-warning-emphasis">Real-Time</div>
-              <div class="small text-muted fw-semibold">Live Occupancy</div>
+        <!-- Hero Quick Search / Discovery Widget -->
+        <div class="card shadow-lg border-0 rounded-4 max-w-760 mx-auto p-2 mb-2 bg-white">
+          <div class="card-body p-2">
+            <div class="row g-2 align-items-center">
+              <div class="col-md-8">
+                <div class="input-group">
+                  <span class="input-group-text bg-white border-0 text-muted ps-3">
+                    <i class="bi bi-search text-success fs-5"></i>
+                  </span>
+                  <input
+                    type="text"
+                    class="form-control border-0 shadow-none ps-2 fs-6"
+                    placeholder="Search by facility name, address, or PIN code..."
+                    @focus="goToUserPortal"
+                    @click="goToUserPortal"
+                  />
+                </div>
+              </div>
+              <div class="col-md-4">
+                <router-link to="/user" class="btn btn-success w-100 py-2.5 rounded-3 fw-semibold shadow-sm d-flex align-items-center justify-content-center gap-2">
+                  <i class="bi bi-geo-alt-fill"></i>
+                  <span>Find Parking Spot</span>
+                </router-link>
+              </div>
             </div>
           </div>
         </div>
@@ -85,85 +87,212 @@
       </div>
     </section>
 
-    <!-- Feature Spotlight: The Clickable Grid & Handicap Parking -->
-    <section class="py-5 bg-light">
-      <div class="container py-3">
+    <!-- Feature Spotlight: The Seamless Driver Experience -->
+    <section class="py-5 bg-light border-top">
+      <div class="container py-4">
         <div class="row g-5 align-items-center">
           
+          <!-- Left Column: Driver Features -->
           <div class="col-lg-6">
-            <span class="badge bg-primary-subtle text-primary fw-bold px-3 py-1.5 rounded-pill mb-3">
-              Interactive Grid Designer
+            <span class="badge bg-success-subtle text-success fw-bold px-3 py-1.5 rounded-pill mb-3">
+              Driver Experience
             </span>
-            <h2 class="fw-bold text-dark mb-3">Empowering Operators with Visual Slot Layouts</h2>
+            <h2 class="fw-bold text-dark mb-3">Everything You Need for Effortless Parking</h2>
             <p class="text-secondary mb-4">
-              Parking lot layouts shouldn't be arbitrary numbers. With our company portal, operators can visually define parking rows and columns, place driving lanes, stairwells, regular bays, and handicap spaces on an interactive canvas.
+              From finding spots near your office or shopping mall to managing your entire family or fleet vehicle garage, our driver portal makes parking completely stress-free.
             </p>
 
             <div class="row g-3">
               <div class="col-sm-6">
-                <div class="bg-white p-3 rounded-3 border shadow-sm">
-                  <div class="fs-4 mb-1">🅿️ / ♿</div>
-                  <h6 class="fw-bold mb-1">Dual Slot Types</h6>
-                  <p class="text-muted small mb-0">Total slots are automatically computed as Regular + Handicap spaces.</p>
+                <div class="bg-white p-3 rounded-3 border shadow-sm h-100">
+                  <div class="fs-4 mb-2">⚡</div>
+                  <h6 class="fw-bold mb-1 text-dark">Smart Quick-Book</h6>
+                  <p class="text-muted small mb-0">Automatic allocation of the nearest available bay to the entrance without race conditions.</p>
                 </div>
               </div>
               <div class="col-sm-6">
-                <div class="bg-white p-3 rounded-3 border shadow-sm">
-                  <div class="fs-4 mb-1">🛣️ / 🪜</div>
-                  <h6 class="fw-bold mb-1">Roadways & Stairs</h6>
-                  <p class="text-muted small mb-0">Paint driving lanes and pedestrian stairs to match real layout geometry.</p>
+                <div class="bg-white p-3 rounded-3 border shadow-sm h-100">
+                  <div class="fs-4 mb-2">📅</div>
+                  <h6 class="fw-bold mb-1 text-dark">Advance Pre-Booking</h6>
+                  <p class="text-muted small mb-0">Reserve a guaranteed spot for tomorrow's meeting, rush hours, or weekend dinner.</p>
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <div class="bg-white p-3 rounded-3 border shadow-sm h-100">
+                  <div class="fs-4 mb-2">🚗</div>
+                  <h6 class="fw-bold mb-1 text-dark">My Garage</h6>
+                  <p class="text-muted small mb-0">Save your Cars, SUVs, EVs, and Motorcycles for instant 1-click booking anytime.</p>
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <div class="bg-white p-3 rounded-3 border shadow-sm h-100">
+                  <div class="fs-4 mb-2">🎟️</div>
+                  <h6 class="fw-bold mb-1 text-dark">Commuter Passes</h6>
+                  <p class="text-muted small mb-0">Monthly and quarterly recurring passes for hassle-free daily parking with huge savings.</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Interactive Grid Visual Preview Mockup -->
+          <!-- Right Column: Interactive Digital Parking Pass Mockup -->
           <div class="col-lg-6">
-            <div class="card shadow rounded-4 border-0 p-3 bg-white">
-              <div class="d-flex justify-content-between align-items-center mb-3 px-1">
-                <span class="fw-bold small text-secondary"><i class="bi bi-grid-3x3 me-1"></i> Interactive Layout Preview</span>
-                <span class="badge bg-success-subtle text-success">8 Slots Saved</span>
+            <div class="card shadow-lg rounded-4 border-0 p-4 bg-white position-relative">
+              
+              <!-- Mock Header -->
+              <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
+                <div class="d-flex align-items-center gap-2">
+                  <div class="badge bg-success p-2 rounded-circle">
+                    <i class="bi bi-check-lg text-white"></i>
+                  </div>
+                  <div>
+                    <h6 class="fw-bold text-dark mb-0">Active Parking Pass</h6>
+                    <small class="text-muted">Digital Gate Clearance</small>
+                  </div>
+                </div>
+                <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1.5 rounded-pill fw-semibold">
+                  🟢 Currently Parked
+                </span>
               </div>
 
-              <!-- Mock Grid -->
-              <div class="mock-grid">
-                <div class="mock-cell cell-parking">🅿️ P-1</div>
-                <div class="mock-cell cell-parking">🅿️ P-2</div>
-                <div class="mock-cell cell-handicap">♿ H-1</div>
-                <div class="mock-cell cell-stairs">🪜 Exit</div>
+              <!-- Pass Details Card -->
+              <div class="bg-light p-3 rounded-3 border mb-3">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <div>
+                    <h5 class="fw-bold text-primary mb-0">Grand Central Parking Hub</h5>
+                    <small class="text-muted"><i class="bi bi-geo-alt me-1"></i>Downtown Plaza • Gate 2 Entrance</small>
+                  </div>
+                  <span class="badge bg-dark font-monospace px-2.5 py-1.5">PASS #SP-8942</span>
+                </div>
 
-                <div class="mock-cell cell-road">🛣️ Road</div>
-                <div class="mock-cell cell-road">🛣️ Road</div>
-                <div class="mock-cell cell-road">🛣️ Road</div>
-                <div class="mock-cell cell-road">🛣️ Road</div>
-
-                <div class="mock-cell cell-parking">🅿️ P-3</div>
-                <div class="mock-cell cell-parking">🅿️ P-4</div>
-                <div class="mock-cell cell-parking">🅿️ P-5</div>
-                <div class="mock-cell cell-handicap">♿ H-2</div>
+                <div class="row g-2 mt-2 pt-2 border-top small">
+                  <div class="col-6">
+                    <span class="text-muted d-block">Allocated Deck & Bay:</span>
+                    <strong class="text-dark fs-6">Deck G • Bay #104</strong>
+                  </div>
+                  <div class="col-6 text-end">
+                    <span class="text-muted d-block">Vehicle Registered:</span>
+                    <strong class="font-monospace text-dark">DL-01-AB-1234 (SUV)</strong>
+                  </div>
+                  <div class="col-6 mt-2">
+                    <span class="text-muted d-block">Live Parked Duration:</span>
+                    <span class="badge bg-primary text-white font-monospace">01h 24m 10s</span>
+                  </div>
+                  <div class="col-6 text-end mt-2">
+                    <span class="text-muted d-block">Running Tariff:</span>
+                    <strong class="text-success fs-6">₹60.00</strong>
+                  </div>
+                </div>
               </div>
 
-              <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top small text-muted">
-                <span>🚗 Regular: <strong>6</strong> | ♿ Handicap: <strong>2</strong></span>
-                <span class="text-primary fw-semibold">Clickable on Company Portal</span>
+              <!-- Contactless QR Badge Demo -->
+              <div class="d-flex align-items-center gap-3 p-3 bg-white border rounded-3">
+                <div class="qr-box bg-dark text-white rounded-3 d-flex align-items-center justify-content-center p-2">
+                  <i class="bi bi-qr-code fs-1"></i>
+                </div>
+                <div class="flex-grow-1">
+                  <h6 class="fw-bold mb-1 text-dark">Contactless Gate Scanning</h6>
+                  <p class="text-muted small mb-0">Present your digital pass QR code at the parking gate for automatic entry and exit clearance.</p>
+                </div>
               </div>
+
+              <div class="mt-3 text-center">
+                <router-link to="/user" class="btn btn-success btn-sm w-100 py-2 fw-semibold rounded-pill">
+                  Reserve Your Spot Now <i class="bi bi-arrow-right ms-1"></i>
+                </router-link>
+              </div>
+
             </div>
           </div>
 
+        </div>
+      </div>
+    </section>
+
+    <!-- How It Works in 3 Steps -->
+    <section class="py-5 bg-white">
+      <div class="container py-4 text-center">
+        
+        <span class="badge bg-primary-subtle text-primary fw-bold px-3 py-1.5 rounded-pill mb-2">
+          Simple & Fast
+        </span>
+        <h2 class="fw-bold text-dark mb-2">How It Works in 3 Easy Steps</h2>
+        <p class="text-secondary mx-auto mb-5" style="max-width: 600px;">
+          Reserving verified parking is as simple as tap, park, and go.
+        </p>
+
+        <div class="row g-4">
+          
+          <div class="col-md-4">
+            <div class="step-card h-100 p-4 rounded-4 border bg-light text-center transition-card">
+              <div class="step-icon-circle bg-success text-white mx-auto mb-3 d-flex align-items-center justify-content-center shadow-sm">
+                <span class="fs-4 fw-bold">1</span>
+              </div>
+              <h5 class="fw-bold text-dark mb-2">Find & Choose Lot</h5>
+              <p class="text-muted small mb-0">
+                Search by location, address, or PIN code. Compare hourly tariffs, multi-deck openings, and accessibility bays.
+              </p>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="step-card h-100 p-4 rounded-4 border bg-light text-center transition-card">
+              <div class="step-icon-circle bg-primary text-white mx-auto mb-3 d-flex align-items-center justify-content-center shadow-sm">
+                <span class="fs-4 fw-bold">2</span>
+              </div>
+              <h5 class="fw-bold text-dark mb-2">Book Your Spot</h5>
+              <p class="text-muted small mb-0">
+                Select your vehicle from My Garage, choose Park Now or schedule a future window, and receive your instant pass.
+              </p>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="step-card h-100 p-4 rounded-4 border bg-light text-center transition-card">
+              <div class="step-icon-circle bg-dark text-white mx-auto mb-3 d-flex align-items-center justify-content-center shadow-sm">
+                <span class="fs-4 fw-bold">3</span>
+              </div>
+              <h5 class="fw-bold text-dark mb-2">Scan & Park</h5>
+              <p class="text-muted small mb-0">
+                Drive straight to your allotted bay. Scan your digital QR pass at the gate for automatic seamless check-in and checkout.
+              </p>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Bottom Call-To-Action Banner -->
+    <section class="py-5 bg-dark text-white text-center position-relative overflow-hidden">
+      <div class="container py-4">
+        <h2 class="fw-bold mb-3 display-6">Ready to Park Without the Hassle?</h2>
+        <p class="text-secondary mx-auto mb-4 lead" style="max-width: 600px;">
+          Join thousands of drivers enjoying fast, guaranteed, and contactless parking.
+        </p>
+        <div class="d-flex justify-content-center gap-3 flex-wrap">
+          <router-link to="/user" class="btn btn-success btn-lg px-4 py-2.5 rounded-pill fw-semibold shadow">
+            <i class="bi bi-car-front-fill me-1"></i> Start Parking Now
+          </router-link>
+          <router-link to="/register" class="btn btn-outline-light btn-lg px-4 py-2.5 rounded-pill fw-semibold">
+            Create Free Account
+          </router-link>
         </div>
       </div>
     </section>
 
     <!-- Footer -->
-    <footer class="bg-dark text-white py-4 border-top">
+    <footer class="bg-dark text-white py-4 border-top border-secondary-subtle">
       <div class="container d-flex flex-wrap justify-content-between align-items-center gap-3">
         <div class="d-flex align-items-center gap-2">
-          <i class="bi bi-car-front-fill text-success fs-5"></i>
-          <span class="fw-bold">SmartPark Enterprise</span>
-          <span class="text-secondary small ms-2">© 2026 All Rights Reserved</span>
+          <div class="brand-icon-box bg-success text-white rounded-2 d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
+            <i class="bi bi-p-square-fill fs-6"></i>
+          </div>
+          <span class="fw-bold">SmartPark</span>
+          <span class="text-secondary small ms-2">© 2026 Vehicle Parking System. All Rights Reserved.</span>
         </div>
         <div class="d-flex gap-4 small text-secondary">
-          <router-link to="/user" class="text-white-50 text-decoration-none hover-white">User Portal</router-link>
+          <router-link to="/user" class="text-white-50 text-decoration-none hover-white">Driver Portal</router-link>
           <router-link to="/company" class="text-white-50 text-decoration-none hover-white">Company Portal</router-link>
           <router-link to="/admin" class="text-white-50 text-decoration-none hover-white">Admin Portal</router-link>
           <router-link to="/register" class="text-white-50 text-decoration-none hover-white">Register</router-link>
@@ -176,7 +305,12 @@
 
 <script>
 export default {
-  name: 'LandingPage'
+  name: 'LandingPage',
+  methods: {
+    goToUserPortal() {
+      this.$router.push('/user')
+    }
+  }
 }
 </script>
 
@@ -191,8 +325,12 @@ export default {
   height: 36px;
 }
 
+.tracking-tight {
+  letter-spacing: -0.02em;
+}
+
 .hero-section {
-  background: radial-gradient(circle at 50% 10%, rgba(25, 135, 84, 0.08) 0%, rgba(13, 110, 253, 0.03) 50%, #fafbfc 100%);
+  background: radial-gradient(circle at 50% 10%, rgba(25, 135, 84, 0.08) 0%, rgba(13, 110, 253, 0.04) 50%, #fafbfc 100%);
 }
 
 .pulse-dot {
@@ -221,111 +359,36 @@ export default {
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #0d6efd 0%, #198754 100%);
+  background: linear-gradient(135deg, #198754 0%, #0d6efd 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
-.max-w-900 {
-  max-width: 900px;
+.max-w-760 {
+  max-width: 760px;
 }
 
-.stat-pill {
-  transition: transform 0.2s ease;
+.qr-box {
+  width: 54px;
+  height: 54px;
 }
 
-.stat-pill:hover {
-  transform: translateY(-3px);
+.step-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Portal Cards */
-.portal-card {
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  background: #ffffff;
-  border: 1px solid #e9ecef !important;
+.step-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.06);
 }
 
-.portal-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.09) !important;
-}
-
-.featured-portal {
-  border: 2px solid #0d6efd !important;
-}
-
-.portal-card:hover .transition-arrow {
-  transform: translateX(6px);
-}
-
-.transition-arrow {
-  transition: transform 0.2s ease;
-}
-
-.card-accent-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 4px;
-}
-
-.portal-icon-circle {
-  width: 56px;
-  height: 56px;
-}
-
-.cursor-pointer {
-  cursor: pointer;
-}
-
-.hover-underline:hover {
-  text-decoration: underline !important;
+.step-icon-circle {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
 }
 
 .hover-white:hover {
   color: #ffffff !important;
-}
-
-/* Mock Grid Preview */
-.mock-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.mock-cell {
-  aspect-ratio: 1.4;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 700;
-  border: 1px solid transparent;
-}
-
-.cell-parking {
-  background-color: #d1e7dd;
-  border-color: #198754;
-  color: #0f5132;
-}
-
-.cell-handicap {
-  background-color: #cff4fc;
-  border-color: #0dcaf0;
-  color: #055160;
-}
-
-.cell-road {
-  background-color: #343a40;
-  border-color: #212529;
-  color: #f8f9fa;
-}
-
-.cell-stairs {
-  background-color: #fff3cd;
-  border-color: #ffc107;
-  color: #664d03;
 }
 </style>
